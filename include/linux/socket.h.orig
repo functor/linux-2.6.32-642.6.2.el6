@@ -306,8 +306,6 @@ struct ucred {
 #define SOL_RDS		276
 #define SOL_IUCV	277
 
-#define SO_SETXID	SO_PEERCRED
-
 /* IPX options */
 #define IPX_TYPE	1
 
