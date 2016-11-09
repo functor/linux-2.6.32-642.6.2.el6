@@ -1,0 +1,30 @@
+--- net/packet/af_packet.c
++++ net/packet/af_packet.c
+@@ -475,6 +528,9 @@
+ 	__be16 proto = 0;
+ 	int err;
+ 
++	if (!nx_capable(CAP_NET_RAW, NXC_RAW_SEND))
++		return -EPERM;
++
+ 	/*
+ 	 *	Get and verify the address.
+ 	 */
+@@ -1146,6 +1207,9 @@
+ 	unsigned char *addr;
+ 	int ifindex, err, reserve = 0;
+ 
++	if (!nx_capable(CAP_NET_RAW, NXC_RAW_SEND)) 
++		return -EPERM;
++
+ 	/*
+ 	 *	Get and verify the address.
+ 	 */
+@@ -1331,6 +1395,7 @@
+ 
+ 	po->num = protocol;
+ 	po->prot_hook.type = protocol;
++	po->prot_hook.sknid_elevator = 1;
+ 	po->prot_hook.dev = dev;
+ 
+ 	po->ifindex = dev ? dev->ifindex : 0;
