@@ -44,7 +44,7 @@ static void dump_packet(struct sbuff *m,
 	else
 		logflags = NF_LOG_MASK;
 
-	printk("TAG=%d ", skb->skb_tag);
+	sb_add(m, "TAG=%d ", skb->skb_tag);
 
 	ih = skb_header_pointer(skb, iphoff, sizeof(_iph), &_iph);
 	if (ih == NULL) {
