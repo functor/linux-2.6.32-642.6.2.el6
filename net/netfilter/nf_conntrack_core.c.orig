@@ -727,9 +727,6 @@ init_conntrack(struct net *net,
 	hlist_nulls_add_head_rcu(&ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode,
 		       &net->ct.unconfirmed);
 
-	ct->xid[IP_CT_DIR_ORIGINAL] = -1;
-	ct->xid[IP_CT_DIR_REPLY] = -1;
-
 	spin_unlock_bh(&nf_conntrack_lock);
 
 	if (exp) {

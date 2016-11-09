@@ -579,13 +579,6 @@ config NETFILTER_XT_MATCH_CLUSTER
 	  If you say Y or M here, try `iptables -m cluster --help` for
 	  more information.
 
-config NETFILTER_XT_TARGET_SETXID
-	tristate '"SETXID" target support'
-	depends on NETFILTER_XTABLES
-	help
-	  This option adds a `SETXID' target, which allows you to alter the
-	  xid of a socket.
-
 config NETFILTER_XT_MATCH_COMMENT
 	tristate  '"comment" match support'
 	depends on NETFILTER_ADVANCED
