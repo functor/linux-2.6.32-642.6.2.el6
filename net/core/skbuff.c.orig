@@ -214,7 +214,6 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	skb->transport_header = ~0U;
 #endif
 
-	if (!in_interrupt()) skb->skb_tag = nx_current_nid(); else skb->skb_tag = 0;
 	/* make sure we initialize shinfo sequentially */
 	shinfo = skb_shinfo(skb);
 	atomic_set(&shinfo->dataref, 1);
@@ -635,7 +634,6 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 #endif
 #endif
 	new->vlan_tci		= old->vlan_tci;
-	new->skb_tag            = old->skb_tag;
 
 	skb_copy_secmark(new, old);
 
