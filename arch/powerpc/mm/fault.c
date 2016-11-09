@@ -360,6 +360,8 @@ bad_area_nosemaphore:
  */
 out_of_memory:
 	up_read(&mm->mmap_sem);
+	printk("VM: killing process %s(%d:#%u)\n",
+		current->comm, current->pid, current->xid);
 	if (!user_mode(regs))
 		return SIGKILL;
 	pagefault_out_of_memory();

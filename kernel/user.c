@@ -251,10 +251,10 @@ static struct kobj_type uids_ktype = {
  *
  * See Documentation/scheduler/sched-design-CFS.txt for ramifications.
  */
-static int uids_user_create(struct user_struct *up)
+static int uids_user_create(struct user_namespace *ns, struct user_struct *up)
 {
 	struct kobject *kobj = &up->kobj;
-	int error;
+	int error = 0;
 
 	memset(kobj, 0, sizeof(struct kobject));
 	if (up->user_ns != &init_user_ns)
@@ -282,7 +282,7 @@ int __init uids_sysfs_init(void)
 	if (!uids_kset)
 		return -ENOMEM;
 
-	return uids_user_create(&root_user);
+	return uids_user_create(NULL, &root_user);
 }
 
 /* delayed work function to remove sysfs directory for a user and free up
@@ -353,7 +353,8 @@ static struct user_struct *uid_hash_find(uid_t uid, struct hlist_head *hashent)
 }
 
 int uids_sysfs_init(void) { return 0; }
-static inline int uids_user_create(struct user_struct *up) { return 0; }
+static inline int uids_user_create(struct user_namespace *ns,
+	struct user_struct *up) { return 0; }
 static inline void uids_mutex_lock(void) { }
 static inline void uids_mutex_unlock(void) { }
 
@@ -450,7 +451,7 @@ struct user_struct *alloc_uid(struct user_namespace *ns, uid_t uid)
 
 		new->user_ns = get_user_ns(ns);
 
-		if (uids_user_create(new))
+		if (uids_user_create(ns, new))
 			goto out_destoy_sched;
 
 		/*

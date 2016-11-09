@@ -120,6 +120,9 @@ static struct xfs_kobj xfs_dbg_kobj;   /* global debug sysfs attrs */
 #define MNTOPT_NODELAYLOG  "nodelaylog"	/* Delayed logging disabled */
 #define MNTOPT_DISCARD	   "discard"	/* Discard unused blocks */
 #define MNTOPT_NODISCARD   "nodiscard"	/* Do not discard unused blocks */
+#define MNTOPT_TAGXID	"tagxid"	/* context tagging for inodes */
+#define MNTOPT_TAGGED	"tag"		/* context tagging for inodes */
+#define MNTOPT_NOTAGTAG	"notag"		/* do not use context tagging */
 
 /*
  * Table driven mount option parser.
@@ -128,10 +131,14 @@ static struct xfs_kobj xfs_dbg_kobj;   /* global debug sysfs attrs */
  * in the future, too.
  */
 enum {
+	Opt_tag, Opt_notag,
 	Opt_barrier, Opt_nobarrier, Opt_err
 };
 
 static const match_table_t tokens = {
+	{Opt_tag, "tagxid"},
+	{Opt_tag, "tag"},
+	{Opt_notag, "notag"},
 	{Opt_barrier, "barrier"},
 	{Opt_nobarrier, "nobarrier"},
 	{Opt_err, NULL}
@@ -381,6 +388,19 @@ xfs_parseargs(
 		} else if (!strcmp(this_char, "irixsgid")) {
 			xfs_warn(mp,
 	"irixsgid is now a sysctl(2) variable, option is deprecated.");
+#ifndef CONFIG_TAGGING_NONE
+		} else if (!strcmp(this_char, MNTOPT_TAGGED)) {
+			mp->m_flags |= XFS_MOUNT_TAGGED;
+		} else if (!strcmp(this_char, MNTOPT_NOTAGTAG)) {
+			mp->m_flags &= ~XFS_MOUNT_TAGGED;
+		} else if (!strcmp(this_char, MNTOPT_TAGXID)) {
+			mp->m_flags |= XFS_MOUNT_TAGGED;
+#endif
+#ifdef CONFIG_PROPAGATE
+		} else if (!strcmp(this_char, MNTOPT_TAGGED)) {
+			/* use value */
+			mp->m_flags |= XFS_MOUNT_TAGGED;
+#endif
 		} else {
 			xfs_warn(mp, "unknown mount option [%s].", this_char);
 			return EINVAL;
@@ -1233,6 +1253,16 @@ xfs_fs_remount(
 		case Opt_nobarrier:
 			mp->m_flags &= ~XFS_MOUNT_BARRIER;
 			break;
+		case Opt_tag:
+			if (!(sb->s_flags & MS_TAGGED)) {
+				printk(KERN_INFO
+					"XFS: %s: tagging not permitted on remount.\n",
+					sb->s_id);
+				return -EINVAL;
+			}
+			break;
+		case Opt_notag:
+			break;
 		default:
 			/*
 			 * Logically we would return an error here to prevent
@@ -1462,6 +1492,9 @@ xfs_fs_fill_super(
 	error = xfs_filestream_mount(mp);
 	if (error)
 		goto out_free_sb;
+
+	if (mp->m_flags & XFS_MOUNT_TAGGED)
+		sb->s_flags |= MS_TAGGED;
 
 	/*
 	 * we must configure the block size in the superblock before we run the

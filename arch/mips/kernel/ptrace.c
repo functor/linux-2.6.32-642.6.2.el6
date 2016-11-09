@@ -25,6 +25,7 @@
 #include <linux/security.h>
 #include <linux/audit.h>
 #include <linux/seccomp.h>
+#include <linux/vs_base.h>
 
 #include <asm/byteorder.h>
 #include <asm/cpu.h>
@@ -258,6 +259,9 @@ int ptrace_set_watch_regs(struct task_struct *child,
 long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 {
 	int ret;
+
+	if (!vx_check(vx_task_xid(child), VS_WATCH_P | VS_IDENT))
+		goto out;
 
 	switch (request) {
 	/* when I and D space are separate, these will need to be fixed. */

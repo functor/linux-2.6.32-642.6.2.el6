@@ -41,6 +41,7 @@
 #include <linux/slab.h>
 #include <linux/highmem.h>
 #include <linux/quotaops.h>
+#include <linux/vs_tag.h>
 
 #define MLOG_MASK_PREFIX ML_NAMEI
 #include <cluster/masklog.h>
@@ -481,6 +482,7 @@ static int ocfs2_mknod_locked(struct ocfs2_super *osb,
 	u64 fe_blkno = 0;
 	u16 suballoc_bit;
 	u16 feat;
+	tag_t tag;
 
 	*new_fe_bh = NULL;
 
@@ -524,8 +526,11 @@ static int ocfs2_mknod_locked(struct ocfs2_super *osb,
 	fe->i_blkno = cpu_to_le64(fe_blkno);
 	fe->i_suballoc_bit = cpu_to_le16(suballoc_bit);
 	fe->i_suballoc_slot = cpu_to_le16(inode_ac->ac_alloc_slot);
-	fe->i_uid = cpu_to_le32(inode->i_uid);
-	fe->i_gid = cpu_to_le32(inode->i_gid);
+
+	tag = dx_current_fstag(osb->sb);
+	fe->i_uid = cpu_to_le32(TAGINO_UID(DX_TAG(inode), inode->i_uid, tag));
+	fe->i_gid = cpu_to_le32(TAGINO_GID(DX_TAG(inode), inode->i_gid, tag));
+	inode->i_tag = tag;
 	fe->i_mode = cpu_to_le16(inode->i_mode);
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		fe->id1.dev1.i_rdev = cpu_to_le64(huge_encode_dev(dev));

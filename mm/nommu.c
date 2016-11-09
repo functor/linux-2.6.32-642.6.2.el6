@@ -1414,7 +1414,7 @@ unsigned long do_mmap_pgoff(struct file *file,
 	/* okay... we have a mapping; now we have to register it */
 	result = vma->vm_start;
 
-	current->mm->total_vm += len >> PAGE_SHIFT;
+	vx_vmpages_add(current->mm, len >> PAGE_SHIFT);
 
 share:
 	add_vma_to_mm(current->mm, vma);
@@ -1674,7 +1674,7 @@ void exit_mmap(struct mm_struct *mm)
 
 	kenter("");
 
-	mm->total_vm = 0;
+	vx_vmpages_sub(mm, mm->total_vm);
 
 	while ((vma = mm->mmap)) {
 		mm->mmap = vma->vm_next;

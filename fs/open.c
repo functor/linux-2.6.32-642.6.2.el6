@@ -31,6 +31,10 @@
 #include <linux/falloc.h>
 #include <linux/fs_struct.h>
 #include <linux/ima.h>
+#include <linux/vs_base.h>
+#include <linux/vs_limit.h>
+#include <linux/vs_tag.h>
+#include <linux/vs_cowbl.h>
 
 #include "internal.h"
 
@@ -522,6 +526,10 @@ retry:
 	error = user_path_at(dfd, filename, lookup_flags, &path);
 	if (error)
 		goto out;
+
+	error = cow_check_and_break(&path);
+	if (error)
+		goto dput_and_out;
 	inode = path.dentry->d_inode;
 
 	error = mnt_want_write(path.mnt);
@@ -559,11 +567,11 @@ static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
 	newattrs.ia_valid =  ATTR_CTIME;
 	if (user != (uid_t) -1) {
 		newattrs.ia_valid |= ATTR_UID;
-		newattrs.ia_uid = user;
+		newattrs.ia_uid = dx_map_uid(user);
 	}
 	if (group != (gid_t) -1) {
 		newattrs.ia_valid |= ATTR_GID;
-		newattrs.ia_gid = group;
+		newattrs.ia_gid = dx_map_gid(group);
 	}
 	if (!S_ISDIR(inode->i_mode))
 		newattrs.ia_valid |=
@@ -593,7 +601,11 @@ retry:
 	error = mnt_want_write(path.mnt);
 	if (error)
 		goto out_release;
-	error = chown_common(path.dentry, user, group);
+#ifdef CONFIG_VSERVER_COWBL
+	error = cow_check_and_break(&path);
+	if (!error)
+#endif
+		error = chown_common(path.dentry, user, group);
 	mnt_drop_write(path.mnt);
 out_release:
 	path_put(&path);
@@ -858,6 +870,7 @@ static void __put_unused_fd(struct files_struct *files, unsigned int fd)
 	__FD_CLR(fd, fdt->open_fds);
 	if (fd < files->next_fd)
 		files->next_fd = fd;
+	vx_openfd_dec(fd);
 }
 
 void put_unused_fd(unsigned int fd)

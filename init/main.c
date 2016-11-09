@@ -73,6 +73,7 @@
 #include <linux/perf_event.h>
 #include <linux/list.h>
 #include <trace/boot.h>
+#include <linux/vserver/percpu.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>

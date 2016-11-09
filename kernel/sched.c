@@ -72,6 +72,8 @@
 #include <linux/ctype.h>
 #include <linux/ftrace.h>
 #include <linux/clocksource.h>
+#include <linux/vs_sched.h>
+#include <linux/vs_cvirt.h>
 
 #include <asm/tlb.h>
 #include <asm/irq_regs.h>
@@ -3223,9 +3225,18 @@ EXPORT_SYMBOL(avenrun);
  */
 void get_avenrun(unsigned long *loads, unsigned long offset, int shift)
 {
-	loads[0] = (avenrun[0] + offset) << shift;
-	loads[1] = (avenrun[1] + offset) << shift;
-	loads[2] = (avenrun[2] + offset) << shift;
+	if (vx_flags(VXF_VIRT_LOAD, 0)) {
+		struct vx_info *vxi = current_vx_info();
+
+		loads[0] = (vxi->cvirt.load[0] + offset) << shift;
+		loads[1] = (vxi->cvirt.load[1] + offset) << shift;
+		loads[2] = (vxi->cvirt.load[2] + offset) << shift;
+	}
+	else {
+		loads[0] = (avenrun[0] + offset) << shift;
+		loads[1] = (avenrun[1] + offset) << shift;
+		loads[2] = (avenrun[2] + offset) << shift;
+	}
 }
 
 static unsigned long
@@ -5649,16 +5660,19 @@ void account_user_time(struct task_struct *p, cputime_t cputime,
 		       cputime_t cputime_scaled)
 {
 	struct cpu_usage_stat *cpustat = &kstat_this_cpu.cpustat;
+	struct vx_info *vxi = p->vx_info;  /* p is _always_ current */
 	cputime64_t tmp;
+	int nice = (TASK_NICE(p) > 0);
 
 	/* Add user time to process. */
 	p->utime = cputime_add(p->utime, cputime);
 	p->utimescaled = cputime_add(p->utimescaled, cputime_scaled);
+	vx_account_user(vxi, cputime, nice);
 	account_group_user_time(p, cputime);
 
 	/* Add user time to cpustat. */
 	tmp = cputime_to_cputime64(cputime);
-	if (TASK_NICE(p) > 0)
+	if (nice)
 		cpustat->nice = cputime64_add(cpustat->nice, tmp);
 	else
 		cpustat->user = cputime64_add(cpustat->user, tmp);
@@ -5704,6 +5718,7 @@ void account_system_time(struct task_struct *p, int hardirq_offset,
 			 cputime_t cputime, cputime_t cputime_scaled)
 {
 	struct cpu_usage_stat *cpustat = &kstat_this_cpu.cpustat;
+	struct vx_info *vxi = p->vx_info;  /* p is _always_ current */
 	cputime64_t tmp;
 
 	if ((p->flags & PF_VCPU) && (irq_count() - hardirq_offset == 0)) {
@@ -5714,6 +5729,7 @@ void account_system_time(struct task_struct *p, int hardirq_offset,
 	/* Add system time to process. */
 	p->stime = cputime_add(p->stime, cputime);
 	p->stimescaled = cputime_add(p->stimescaled, cputime_scaled);
+	vx_account_system(vxi, cputime, 0 /* do we have idle time? */);
 	account_group_system_time(p, cputime);
 
 	/* Add system time to cpustat. */
@@ -6876,7 +6892,7 @@ SYSCALL_DEFINE1(nice, int, increment)
 		nice = 19;
 
 	if (increment < 0 && !can_nice(current, nice))
-		return -EPERM;
+		return vx_flags(VXF_IGNEG_NICE, 0) ? 0 : -EPERM;
 
 	retval = security_task_setnice(current, nice);
 	if (retval)

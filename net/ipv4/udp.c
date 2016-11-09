@@ -231,14 +231,7 @@ fail:
 }
 EXPORT_SYMBOL(udp_lib_get_port);
 
-static int ipv4_rcv_saddr_equal(const struct sock *sk1, const struct sock *sk2)
-{
-	struct inet_sock *inet1 = inet_sk(sk1), *inet2 = inet_sk(sk2);
-
-	return 	(!ipv6_only_sock(sk2)  &&
-		 (!inet1->rcv_saddr || !inet2->rcv_saddr ||
-		   inet1->rcv_saddr == inet2->rcv_saddr));
-}
+extern int ipv4_rcv_saddr_equal(const struct sock *, const struct sock *);
 
 int udp_v4_get_port(struct sock *sk, unsigned short snum)
 {
@@ -260,6 +253,11 @@ static inline int compute_score(struct sock *sk, struct net *net, __be32 saddr,
 			if (inet->rcv_saddr != daddr)
 				return -1;
 			score += 4;
+		} else {
+			/* block non nx_info ips */
+			if (!v4_addr_in_nx_info(sk->sk_nx_info,
+				daddr, NXA_MASK_BIND))
+				return -1;
 		}
 		if (inet->daddr) {
 			if (inet->daddr != saddr)
@@ -279,6 +277,7 @@ static inline int compute_score(struct sock *sk, struct net *net, __be32 saddr,
 	}
 	return score;
 }
+
 
 /* UDP is nearly always wildcards out the wazoo, it makes no sense to try
  * harder than this. -DaveM
@@ -302,6 +301,11 @@ begin:
 	sk_nulls_for_each_rcu(sk, node, &hslot->head) {
 		score = compute_score(sk, net, saddr, hnum, sport,
 				      daddr, dport, dif);
+		/* FIXME: disabled?
+		if (score == 9) {
+			result = sk;
+			break;
+		} else */
 		if (score > badness) {
 			result = sk;
 			badness = score;
@@ -326,6 +330,7 @@ begin:
 	if (get_nulls_value(node) != slot)
 		goto begin;
 
+
 	if (result) {
 		if (unlikely(!atomic_inc_not_zero(&result->sk_refcnt)))
 			result = NULL;
@@ -335,6 +340,7 @@ begin:
 			goto begin;
 		}
 	}
+
 	rcu_read_unlock();
 	return result;
 }
@@ -377,7 +383,7 @@ static inline struct sock *udp_v4_mcast_next(struct net *net, struct sock *sk,
 		    s->sk_hash != hnum					||
 		    (inet->daddr && inet->daddr != rmt_addr)		||
 		    (inet->dport != rmt_port && inet->dport)		||
-		    (inet->rcv_saddr && inet->rcv_saddr != loc_addr)	||
+		    !v4_sock_addr_match(sk->sk_nx_info, inet, loc_addr)	||
 		    ipv6_only_sock(s)					||
 		    (s->sk_bound_dev_if && s->sk_bound_dev_if != dif))
 			continue;
@@ -760,8 +766,13 @@ int udp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 					       { .sport = inet->sport,
 						 .dport = dport } } };
 		struct net *net = sock_net(sk);
+		struct nx_info *nxi = sk->sk_nx_info;
 
 		security_sk_classify_flow(sk, &fl);
+		err = ip_v4_find_src(net, nxi, &rt, &fl);
+		if (err)
+			goto out;
+
 		err = ip_route_output_flow(net, &rt, &fl, sk, 1);
 		if (err) {
 			if (err == -ENETUNREACH)
@@ -1045,7 +1056,8 @@ try_again:
 	if (sin) {
 		sin->sin_family = AF_INET;
 		sin->sin_port = udp_hdr(skb)->source;
-		sin->sin_addr.s_addr = ip_hdr(skb)->saddr;
+		sin->sin_addr.s_addr = nx_map_sock_lback(
+			skb->sk->sk_nx_info, ip_hdr(skb)->saddr);
 		memset(sin->sin_zero, 0, sizeof(sin->sin_zero));
 		*addr_len = sizeof(*sin);
 	}
@@ -1698,6 +1710,8 @@ static struct sock *udp_get_first(struct seq_file *seq, int start)
 		sk_nulls_for_each(sk, node, &hslot->head) {
 			if (!net_eq(sock_net(sk), net))
 				continue;
+			if (!nx_check(sk->sk_nid, VS_WATCH_P | VS_IDENT))
+				continue;
 			if (sk->sk_family == state->family)
 				goto found;
 		}
@@ -1715,7 +1729,9 @@ static struct sock *udp_get_next(struct seq_file *seq, struct sock *sk)
 
 	do {
 		sk = sk_nulls_next(sk);
-	} while (sk && (!net_eq(sock_net(sk), net) || sk->sk_family != state->family));
+	} while (sk && (!net_eq(sock_net(sk), net) ||
+		sk->sk_family != state->family ||
+		!nx_check(sk->sk_nid, VS_WATCH_P | VS_IDENT)));
 
 	if (!sk) {
 		if (state->bucket < UDP_HTABLE_SIZE)
@@ -1822,7 +1838,10 @@ static void udp4_format_sock(struct sock *sp, struct seq_file *f,
 
 	seq_printf(f, "%4d: %08X:%04X %08X:%04X"
 		" %02X %08X:%08X %02X:%08lX %08X %5u %8d %lu %d %p %d%n",
-		bucket, src, srcp, dest, destp, sp->sk_state,
+		bucket,
+		nx_map_sock_lback(current_nx_info(), src), srcp,
+		nx_map_sock_lback(current_nx_info(), dest), destp,
+		sp->sk_state,
 		sk_wmem_alloc_get(sp),
 		sk_rmem_alloc_get(sp),
 		0, 0L, 0, sock_i_uid(sp), 0, sock_i_ino(sp),

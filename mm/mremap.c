@@ -20,6 +20,7 @@
 #include <linux/security.h>
 #include <linux/syscalls.h>
 #include <linux/mmu_notifier.h>
+#include <linux/vs_memory.h>
 
 #include <asm/uaccess.h>
 #include <asm/cacheflush.h>
@@ -261,7 +262,7 @@ static unsigned long move_vma(struct vm_area_struct *vma,
 	 * If this were a serious issue, we'd add a flag to do_munmap().
 	 */
 	hiwater_vm = mm->hiwater_vm;
-	mm->total_vm += new_len >> PAGE_SHIFT;
+	vx_vmpages_add(mm, new_len >> PAGE_SHIFT);
 	vm_stat_account(mm, vma->vm_flags, vma->vm_file, new_len>>PAGE_SHIFT);
 
 	if (do_munmap(mm, old_addr, old_len) < 0) {
@@ -279,7 +280,7 @@ static unsigned long move_vma(struct vm_area_struct *vma,
 	}
 
 	if (vm_flags & VM_LOCKED) {
-		mm->locked_vm += new_len >> PAGE_SHIFT;
+		vx_vmlocked_add(mm, new_len >> PAGE_SHIFT);
 		if (new_len > old_len)
 			mlock_vma_pages_range(new_vma, new_addr + old_len,
 						       new_addr + new_len);
@@ -500,10 +501,12 @@ unsigned long do_mremap(unsigned long addr,
 				goto out;
 			}
 
-			mm->total_vm += pages;
+			// mm->total_vm += pages;
+			vx_vmpages_add(mm, pages);
 			vm_stat_account(mm, vma->vm_flags, vma->vm_file, pages);
 			if (vma->vm_flags & VM_LOCKED) {
-				mm->locked_vm += pages;
+				// mm->locked_vm += pages;
+				vx_vmlocked_add(mm, pages);
 				mlock_vma_pages_range(vma, addr + old_len,
 						   addr + new_len);
 			}

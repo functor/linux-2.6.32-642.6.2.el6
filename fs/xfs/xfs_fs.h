@@ -67,6 +67,9 @@ struct fsxattr {
 #define XFS_XFLAG_EXTSZINHERIT	0x00001000	/* inherit inode extent size */
 #define XFS_XFLAG_NODEFRAG	0x00002000  	/* do not defragment */
 #define XFS_XFLAG_FILESTREAM	0x00004000	/* use filestream allocator */
+#define XFS_XFLAG_IXUNLINK	0x00008000	/* immutable invert on unlink */
+#define XFS_XFLAG_BARRIER	0x10000000	/* chroot() barrier */
+#define XFS_XFLAG_COW		0x20000000	/* copy on write mark */
 #define XFS_XFLAG_HASATTR	0x80000000	/* no DIFLAG for this	*/
 
 /*
@@ -298,7 +301,8 @@ typedef struct xfs_bstat {
 #define	bs_projid	bs_projid_lo	/* (previously just bs_projid)	*/
 	__u16		bs_forkoff;	/* inode fork offset in bytes	*/
 	__u16		bs_projid_hi;	/* higher part of project id	*/
-	unsigned char	bs_pad[10];	/* pad space, unused		*/
+	unsigned char	bs_pad[8];	/* pad space, unused		*/
+	__u16		bs_tag;		/* context tagging		*/
 	__u32		bs_dmevmask;	/* DMIG event mask		*/
 	__u16		bs_dmstate;	/* DMIG state info		*/
 	__u16		bs_aextents;	/* attribute number of extents	*/

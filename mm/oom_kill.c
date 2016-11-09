@@ -30,7 +30,10 @@
 #include <linux/memcontrol.h>
 #include <linux/mempolicy.h>
 #include <linux/security.h>
+#include <linux/reboot.h>
 #include <linux/ptrace.h>
+#include <linux/vs_memory.h>
+#include <linux/vs_context.h>
 
 int sysctl_panic_on_oom;
 int sysctl_oom_kill_allocating_task;
@@ -197,6 +200,19 @@ unsigned int oom_badness(struct task_struct *p, struct mem_cgroup *mem,
 
 	points *= 1000;
 	points /= totalpages;
+
+	/*
+	 * add points for context badness and
+	 * reduce badness for processes belonging to
+	 * a different context
+	 */
+
+	points += vx_badness(p, p->mm);
+
+	if ((vx_current_xid() > 1) &&
+		vx_current_xid() != vx_task_xid(p))
+		points /= 16;
+
 	task_unlock(p);
 
 	/*
@@ -213,11 +229,10 @@ unsigned int oom_badness(struct task_struct *p, struct mem_cgroup *mem,
 	 */
 	points += p->signal->oom_score_adj;
 
-	/*
-	 * Never return 0 for an eligible task that may be killed since it's
-	 * possible that no single user task uses more than 0.1% of memory and
-	 * no single admin tasks uses more than 3.0%.
-	 */
+#ifdef DEBUG
+	printk(KERN_DEBUG "OOMkill: task %s(%d:#%u) got %d points\n",
+		p->comm, task_pid_nr(p), p->xid, points);
+#endif
 	if (points <= 0)
 		return 1;
 	return (points < 1000) ? points : 1000;
@@ -298,6 +313,7 @@ static struct task_struct *select_bad_process(unsigned int *ppoints,
 {
 	struct task_struct *g, *p;
 	struct task_struct *chosen = NULL;
+	unsigned xid = vx_current_xid();
 	*ppoints = 0;
 
 	do_each_thread(g, p) {
@@ -305,7 +321,15 @@ static struct task_struct *select_bad_process(unsigned int *ppoints,
 
 		if (p->exit_state)
 			continue;
+		/* skip the init task, global and per guest */
+		if (task_is_init(p))
+			continue;
+		if (mem && !task_in_mem_cgroup(p, mem))
+			continue;
 		if (oom_unkillable_task(p, mem, nodemask))
+			continue;
+		/* skip other guest and host processes if oom in guest */
+		if (xid && vx_task_xid(p) != xid)
 			continue;
 
 		/*
@@ -436,8 +460,8 @@ static int oom_kill_task(struct task_struct *p)
 	/* mm cannot be safely dereferenced after task_unlock(p) */
 	mm = p->mm;
 
-	pr_err("Killed process %d, UID %d, (%s) total-vm:%lukB, anon-rss:%lukB, file-rss:%lukB\n",
-		task_pid_nr(p), task_uid(p), p->comm, K(p->mm->total_vm),
+	pr_err("Killed process %d:#%u, UID %d, (%s) total-vm:%lukB, anon-rss:%lukB, file-rss:%lukB\n",
+		task_pid_nr(p), p->xid, task_uid(p), p->comm, K(p->mm->total_vm),
 		K(get_mm_counter(p->mm, anon_rss)),
 		K(get_mm_counter(p->mm, file_rss)));
 	task_unlock(p);
@@ -491,8 +515,8 @@ static int oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
 	}
 
 	task_lock(p);
-	pr_err("%s: Kill process %d (%s) score %d or sacrifice child\n",
-		message, task_pid_nr(p), p->comm, points);
+	pr_err("%s: Kill process %s(%d:%u) score %d or sacrifice child\n",
+		message, p->comm, task_pid_nr(p), p->xid, points);
 	task_unlock(p);
 
 	/*
@@ -632,6 +656,8 @@ void clear_zonelist_oom(struct zonelist *zonelist, gfp_t gfp_mask)
 	}
 	spin_unlock(&zone_scan_lock);
 }
+
+long vs_oom_action(unsigned int);
 
 /*
  * Try to acquire the oom killer lock for all system zones.  Returns zero if a

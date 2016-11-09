@@ -28,6 +28,7 @@
 #include <linux/prctl.h>
 #include <linux/securebits.h>
 #include <linux/personality.h>
+#include <linux/vs_context.h>
 
 /*
  * If a non-root user executes a setuid-root binary in
@@ -53,7 +54,7 @@ static void warn_setuid_and_fcaps_mixed(char *fname)
 
 int cap_netlink_send(struct sock *sk, struct sk_buff *skb)
 {
-	NETLINK_CB(skb).eff_cap = current_cap();
+	NETLINK_CB(skb).eff_cap = vx_mbcaps(current_cap());
 	return 0;
 }
 
@@ -75,7 +76,22 @@ int cap_netlink_send(struct sock *sk, struct sk_buff *skb)
 int cap_capable(struct task_struct *tsk, const struct cred *cred, int cap,
 		int audit)
 {
-	return cap_raised(cred->cap_effective, cap) ? 0 : -EPERM;
+	struct vx_info *vxi = tsk->vx_info;
+
+#if 0
+	printk("cap_capable() VXF_STATE_SETUP = %llx, raised = %x, eff = %08x:%08x\n",
+		vx_info_flags(vxi, VXF_STATE_SETUP, 0),
+		cap_raised(tsk->cap_effective, cap),
+		tsk->cap_effective.cap[1], tsk->cap_effective.cap[0]);
+#endif
+
+	/* special case SETUP */
+	if (vx_info_flags(vxi, VXF_STATE_SETUP, 0) &&
+		/* FIXME: maybe use cred instead? */
+		cap_raised(tsk->cred->cap_effective, cap))
+		return 0;
+
+	return vx_cap_raised(vxi, cred->cap_effective, cap) ? 0 : -EPERM;
 }
 
 /**
@@ -628,7 +644,7 @@ int cap_inode_setxattr(struct dentry *dentry, const char *name,
 
 	if (!strncmp(name, XATTR_SECURITY_PREFIX,
 		     sizeof(XATTR_SECURITY_PREFIX) - 1)  &&
-	    !capable(CAP_SYS_ADMIN))
+		!vx_capable(CAP_SYS_ADMIN, VXC_FS_SECURITY))
 		return -EPERM;
 	return 0;
 }
@@ -654,7 +670,7 @@ int cap_inode_removexattr(struct dentry *dentry, const char *name)
 
 	if (!strncmp(name, XATTR_SECURITY_PREFIX,
 		     sizeof(XATTR_SECURITY_PREFIX) - 1)  &&
-	    !capable(CAP_SYS_ADMIN))
+		!vx_capable(CAP_SYS_ADMIN, VXC_FS_SECURITY))
 		return -EPERM;
 	return 0;
 }
@@ -972,10 +988,8 @@ error:
  */
 int cap_syslog(int type)
 {
-	if (dmesg_restrict && !capable(CAP_SYS_ADMIN))
-		return -EPERM;
-
-	if ((type != 3 && type != 10) && !capable(CAP_SYS_ADMIN))
+	if ((dmesg_restrict || (type != 3 && type != 10)) &&
+		!vx_capable(CAP_SYS_ADMIN, VXC_SYSLOG))
 		return -EPERM;
 	return 0;
 }

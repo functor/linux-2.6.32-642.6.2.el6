@@ -14,6 +14,9 @@
 #include <linux/fcntl.h>
 #include <linux/quotaops.h>
 #include <linux/security.h>
+#include <linux/proc_fs.h>
+#include <linux/devpts_fs.h>
+#include <linux/vs_tag.h>
 
 /**
  * inode_change_ok - check if attribute changes to an inode are allowed
@@ -73,6 +76,9 @@ int inode_change_ok(const struct inode *inode, struct iattr *attr)
 		if (!is_owner_or_cap(inode))
 			return -EPERM;
 	}
+
+	if (dx_permission(inode, MAY_WRITE))
+		return -EPERM;
 
 	return 0;
 }
@@ -144,6 +150,8 @@ void generic_setattr(struct inode *inode, const struct iattr *attr)
 		inode->i_uid = attr->ia_uid;
 	if (ia_valid & ATTR_GID)
 		inode->i_gid = attr->ia_gid;
+	if ((ia_valid & ATTR_TAG) && IS_TAGGED(inode))
+		inode->i_tag = attr->ia_tag;
 	if (ia_valid & ATTR_ATIME)
 		inode->i_atime = timespec_trunc(attr->ia_atime,
 						inode->i_sb->s_time_gran);
@@ -260,7 +268,8 @@ int notify_change(struct dentry * dentry, struct iattr * attr)
 		error = inode_change_ok(inode, attr);
 		if (!error) {
 			if ((ia_valid & ATTR_UID && attr->ia_uid != inode->i_uid) ||
-			    (ia_valid & ATTR_GID && attr->ia_gid != inode->i_gid))
+			    (ia_valid & ATTR_GID && attr->ia_gid != inode->i_gid) ||
+			    (ia_valid & ATTR_TAG && attr->ia_tag != inode->i_tag))
 				error = vfs_dq_transfer(inode, attr) ?
 					-EDQUOT : 0;
 			if (!error)

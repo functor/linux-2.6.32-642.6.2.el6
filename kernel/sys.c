@@ -41,6 +41,7 @@
 #include <linux/syscalls.h>
 #include <linux/kprobes.h>
 #include <linux/user_namespace.h>
+#include <linux/vs_pid.h>
 
 #include <linux/kmsg_dump.h>
 
@@ -132,7 +133,10 @@ static int set_one_prio(struct task_struct *p, int niceval, int error)
 		goto out;
 	}
 	if (niceval < task_nice(p) && !can_nice(p, niceval)) {
-		error = -EACCES;
+		if (vx_flags(VXF_IGNEG_NICE, 0))
+			error = 0;
+		else
+			error = -EACCES;
 		goto out;
 	}
 	no_nice = security_task_setnice(p, niceval);
@@ -181,6 +185,8 @@ SYSCALL_DEFINE3(setpriority, int, which, int, who, int, niceval)
 			else
 				pgrp = task_pgrp(current);
 			do_each_pid_thread(pgrp, PIDTYPE_PGID, p) {
+				if (!vx_check(p->xid, VS_ADMIN_P | VS_IDENT))
+					continue;
 				error = set_one_prio(p, niceval, error);
 			} while_each_pid_thread(pgrp, PIDTYPE_PGID, p);
 			break;
@@ -242,6 +248,8 @@ SYSCALL_DEFINE2(getpriority, int, which, int, who)
 			else
 				pgrp = task_pgrp(current);
 			do_each_pid_thread(pgrp, PIDTYPE_PGID, p) {
+				if (!vx_check(p->xid, VS_ADMIN_P | VS_IDENT))
+					continue;
 				niceval = 20 - task_nice(p);
 				if (niceval > retval)
 					retval = niceval;
@@ -355,6 +363,9 @@ void kernel_power_off(void)
 	machine_power_off();
 }
 EXPORT_SYMBOL_GPL(kernel_power_off);
+
+long vs_reboot(unsigned int, void __user *);
+
 /*
  * Reboot system call: for obvious reasons only root may call it,
  * and even root needs to set up some magic numbers in the registers
@@ -395,6 +406,9 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 	 */
 	if ((cmd == LINUX_REBOOT_CMD_POWER_OFF) && !pm_power_off)
 		cmd = LINUX_REBOOT_CMD_HALT;
+
+	if (!vx_check(0, VS_ADMIN|VS_WATCH))
+		return vs_reboot(cmd, arg);
 
 	lock_kernel();
 	switch (cmd) {
@@ -1149,7 +1163,7 @@ SYSCALL_DEFINE2(sethostname, char __user *, name, int, len)
 	int errno;
 	char tmp[__NEW_UTS_LEN];
 
-	if (!capable(CAP_SYS_ADMIN))
+	if (!vx_capable(CAP_SYS_ADMIN, VXC_SET_UTSNAME))
 		return -EPERM;
 	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
@@ -1198,7 +1212,7 @@ SYSCALL_DEFINE2(setdomainname, char __user *, name, int, len)
 	int errno;
 	char tmp[__NEW_UTS_LEN];
 
-	if (!capable(CAP_SYS_ADMIN))
+	if (!vx_capable(CAP_SYS_ADMIN, VXC_SET_UTSNAME))
 		return -EPERM;
 	if (len < 0 || len > __NEW_UTS_LEN)
 		return -EINVAL;
@@ -1293,7 +1307,7 @@ int setrlimit(struct task_struct *tsk, unsigned int resource,
 	old_rlim = tsk->signal->rlim + resource;
 	task_lock(tsk->group_leader);
 	if ((new_rlim->rlim_max <= old_rlim->rlim_max) ||
-				capable(CAP_SYS_RESOURCE))
+	    vx_capable(CAP_SYS_RESOURCE, VXC_SET_RLIMIT))
 		*old_rlim = *new_rlim;
 	else
 		retval = -EPERM;

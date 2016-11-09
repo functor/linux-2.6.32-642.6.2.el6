@@ -285,7 +285,9 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 	if (err)
 		goto err;
 
-	mm->stack_vm = mm->total_vm = 1;
+	mm->total_vm = 0;
+	vx_vmpages_inc(mm);
+	mm->stack_vm = 1;
 	up_write(&mm->mmap_sem);
 	bprm->p = vma->vm_end - sizeof(void *);
 	return 0;
@@ -1680,7 +1682,7 @@ static int format_corename(struct core_name *cn, long signr)
 			/* UNIX time of coredump */
 			case 't': {
 				struct timeval tv;
-				do_gettimeofday(&tv);
+				vx_gettimeofday(&tv);
 				err = cn_printf(cn, "%lu", tv.tv_sec);
 				break;
 			}

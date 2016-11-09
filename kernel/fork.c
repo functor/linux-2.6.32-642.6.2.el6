@@ -69,6 +69,10 @@
 #include <linux/user-return-notifier.h>
 #include <linux/khugepaged.h>
 #include <linux/oom.h>
+#include <linux/vs_context.h>
+#include <linux/vs_network.h>
+#include <linux/vs_limit.h>
+#include <linux/vs_memory.h>
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -161,6 +165,8 @@ void free_task(struct task_struct *tsk)
 	account_kernel_stack(tsk->stack, -1);
 	free_thread_info(tsk->stack);
 	rt_mutex_debug_task_free(tsk);
+	clr_vx_info(&tsk->vx_info);
+	clr_nx_info(&tsk->nx_info);
 	ftrace_graph_exit_task(tsk);
 	tracehook_free_task(tsk);
 	free_task_struct(tsk);
@@ -310,6 +316,8 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 	mm->free_area_cache = oldmm->mmap_base;
 	mm->cached_hole_size = ~0UL;
 	mm->map_count = 0;
+	__set_mm_counter(mm, file_rss, 0);
+	__set_mm_counter(mm, anon_rss, 0);
 	cpumask_clear(mm_cpumask(mm));
 	mm->mm_rb = RB_ROOT;
 	rb_link = &mm->mm_rb.rb_node;
@@ -328,7 +336,7 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 
 		if (mpnt->vm_flags & VM_DONTCOPY) {
 			long pages = vma_pages(mpnt);
-			mm->total_vm -= pages;
+			vx_vmpages_sub(mm, pages);
 			vm_stat_account(mm, mpnt->vm_flags, mpnt->vm_file,
 								-pages);
 			continue;
@@ -477,9 +485,9 @@ static struct mm_struct * mm_init(struct mm_struct * mm, struct task_struct *p)
 		(current->mm->flags & MMF_INIT_MASK) : default_dump_filter;
 	mm->core_state = NULL;
 	mm->nr_ptes = 0;
-	set_mm_counter(mm, file_rss, 0);
-	set_mm_counter(mm, anon_rss, 0);
-	set_mm_counter(mm, swap_usage, 0);
+	__set_mm_counter(mm, file_rss, 0);
+	__set_mm_counter(mm, anon_rss, 0);
+	__set_mm_counter(mm, swap_usage, 0);
 	spin_lock_init(&mm->page_table_lock);
 	mm->free_area_cache = TASK_UNMAPPED_BASE;
 	mm->cached_hole_size = ~0UL;
@@ -490,6 +498,7 @@ static struct mm_struct * mm_init(struct mm_struct * mm, struct task_struct *p)
 	if (likely(!mm_alloc_pgd(mm))) {
 		mm->def_flags = 0;
 		mmu_notifier_mm_init(mm);
+		set_vx_info(&mm->mm_vx_info, p->vx_info);
 		return mm;
 	}
 
@@ -526,6 +535,7 @@ void __mmdrop(struct mm_struct *mm)
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	VM_BUG_ON(mm->pmd_huge_pte);
 #endif
+	clr_vx_info(&mm->mm_vx_info);
 	free_mm(mm);
 }
 EXPORT_SYMBOL_GPL(__mmdrop);
@@ -710,6 +720,7 @@ struct mm_struct *dup_mm(struct task_struct *tsk)
 		goto fail_nomem;
 
 	memcpy(mm, oldmm, sizeof(*mm));
+	mm->mm_vx_info = NULL;
 
 	/* Initializing for Swap token stuff */
 	mm->token_priority = 0;
@@ -752,6 +763,7 @@ fail_nocontext:
 	 * If init_new_context() failed, we cannot use mmput() to free the mm
 	 * because it calls destroy_context()
 	 */
+	clr_vx_info(&mm->mm_vx_info);
 	mm_free_pgd(mm);
 	free_mm(mm);
 	return NULL;
@@ -1072,6 +1084,8 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	int retval;
 	struct task_struct *p;
 	int cgroup_callbacks_done = 0;
+	struct vx_info *vxi;
+	struct nx_info *nxi;
 
 	if ((clone_flags & (CLONE_NEWNS|CLONE_FS)) == (CLONE_NEWNS|CLONE_FS))
 		return ERR_PTR(-EINVAL);
@@ -1128,12 +1142,28 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	DEBUG_LOCKS_WARN_ON(!p->hardirqs_enabled);
 	DEBUG_LOCKS_WARN_ON(!p->softirqs_enabled);
 #endif
+	init_vx_info(&p->vx_info, current_vx_info());
+	init_nx_info(&p->nx_info, current_nx_info());
+
+	/* check vserver memory */
+	if (p->mm && !(clone_flags & CLONE_VM)) {
+		if (vx_vmpages_avail(p->mm, p->mm->total_vm))
+			vx_pages_add(p->vx_info, RLIMIT_AS, p->mm->total_vm);
+		else
+			goto bad_fork_free;
+	}
+	if (p->mm && vx_flags(VXF_FORK_RSS, 0)) {
+		if (!vx_rss_avail(p->mm, get_mm_counter(p->mm, file_rss)))
+			goto bad_fork_cleanup_vm;
+	}
 	retval = -EAGAIN;
+	if (!vx_nproc_avail(1))
+		goto bad_fork_cleanup_vm;
 	if (atomic_read(&p->real_cred->user->processes) >=
 			p->signal->rlim[RLIMIT_NPROC].rlim_cur) {
 		if (!capable(CAP_SYS_ADMIN) && !capable(CAP_SYS_RESOURCE) &&
 		    p->real_cred->user != INIT_USER)
-			goto bad_fork_free;
+			goto bad_fork_cleanup_vm;
 	}
 
 	retval = copy_creds(p, clone_flags);
@@ -1386,6 +1416,18 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 
 	total_forks++;
 	spin_unlock(&current->sighand->siglock);
+
+	/* p is copy of current */
+	vxi = p->vx_info;
+	if (vxi) {
+		claim_vx_info(vxi, p);
+		atomic_inc(&vxi->cvirt.nr_threads);
+		atomic_inc(&vxi->cvirt.total_forks);
+		vx_nproc_inc(p);
+	}
+	nxi = p->nx_info;
+	if (nxi)
+		claim_nx_info(nxi, p);
 	write_unlock_irq(&tasklist_lock);
 	proc_fork_connector(p);
 	cgroup_post_fork(p);
@@ -1438,6 +1480,9 @@ bad_fork_cleanup_cgroup:
 bad_fork_cleanup_count:
 	atomic_dec(&p->cred->user->processes);
 	exit_creds(p);
+bad_fork_cleanup_vm:
+	if (p->mm && !(clone_flags & CLONE_VM))
+		vx_pages_sub(p->vx_info, RLIMIT_AS, p->mm->total_vm);
 bad_fork_free:
 	free_task(p);
 fork_out:

@@ -2354,7 +2354,8 @@ xlog_recover_inode_pass2(
 	}
 
 	/* The core is in in-core format */
-	xfs_dinode_to_disk(dip, item->ri_buf[1].i_addr);
+	xfs_dinode_to_disk(dip, item->ri_buf[1].i_addr,
+		mp->m_flags & XFS_MOUNT_TAGGED);
 
 	/* the rest is in on-disk format */
 	if (item->ri_buf[1].i_len > sizeof(struct xfs_icdinode)) {

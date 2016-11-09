@@ -24,6 +24,7 @@
 #include <linux/parser.h>
 #include <linux/fsnotify.h>
 #include <linux/seq_file.h>
+#include <linux/vs_base.h>
 
 #define DEVPTS_DEFAULT_MODE 0600
 /*
@@ -34,6 +35,22 @@
  */
 #define DEVPTS_DEFAULT_PTMX_MODE 0000
 #define PTMX_MINOR	2
+#define PTMX_INO	2
+
+static int devpts_permission(struct inode *inode, int mask)
+{
+	int ret = -EACCES;
+
+	/* devpts is xid tagged */
+	if (inode->i_ino == PTMX_INO ||
+	    vx_check((xid_t)inode->i_tag, VS_WATCH_P | VS_IDENT))
+		ret = generic_permission(inode, mask, NULL);
+	return ret;
+}
+
+static struct inode_operations devpts_file_inode_operations = {
+	.permission     = devpts_permission,
+};
 
 /*
  * sysctl support for setting limits on the number of Unix98 ptys allocated.
@@ -246,7 +263,7 @@ static int mknod_ptmx(struct super_block *sb)
 		goto out;
 	}
 
-	inode->i_ino = 2;
+	inode->i_ino = PTMX_INO;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 
 	mode = S_IFCHR|opts->ptmxmode;
@@ -312,6 +329,26 @@ static int devpts_show_options(struct seq_file *seq, struct vfsmount *vfs)
 	return 0;
 }
 
+static int devpts_filter(struct dentry *de)
+{
+	/* devpts is xid tagged */
+	return de->d_inode->i_ino == PTMX_INO ||
+	       vx_check((xid_t)de->d_inode->i_tag, VS_WATCH_P | VS_IDENT);
+}
+
+static int devpts_readdir(struct file * filp, void * dirent, filldir_t filldir)
+{
+	return dcache_readdir_filter(filp, dirent, filldir, devpts_filter);
+}
+
+static struct file_operations devpts_dir_operations = {
+	.open		= dcache_dir_open,
+	.release	= dcache_dir_close,
+	.llseek		= dcache_dir_lseek,
+	.read		= generic_read_dir,
+	.readdir	= devpts_readdir,
+};
+
 static const struct super_operations devpts_sops = {
 	.statfs		= simple_statfs,
 	.remount_fs	= devpts_remount,
@@ -351,12 +388,15 @@ devpts_fill_super(struct super_block *s, void *data, int silent)
 	inode = new_inode(s);
 	if (!inode)
 		goto free_fsi;
+
 	inode->i_ino = 1;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
 	inode->i_op = &simple_dir_inode_operations;
-	inode->i_fop = &simple_dir_operations;
+	inode->i_fop = &devpts_dir_operations;
 	inode->i_nlink = 2;
+	/* devpts is xid tagged */
+	inode->i_tag = (tag_t)vx_current_xid();
 
 	s->s_root = d_alloc_root(inode);
 	if (s->s_root)
@@ -550,6 +590,9 @@ int devpts_pty_new(struct inode *ptmx_inode, struct tty_struct *tty)
 	inode->i_gid = opts->setgid ? opts->gid : current_fsgid();
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	init_special_inode(inode, S_IFCHR|opts->mode, device);
+	/* devpts is xid tagged */
+	inode->i_tag = (tag_t)vx_current_xid();
+	inode->i_op = &devpts_file_inode_operations;
 	inode->i_private = tty;
 	tty->driver_data = inode;
 

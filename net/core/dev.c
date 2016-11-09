@@ -128,6 +128,7 @@
 #include <linux/jhash.h>
 #include <linux/random.h>
 #include <linux/openvswitch.h>
+#include <linux/vs_inet.h>
 #ifndef __GENKSYMS__
 #include <trace/events/napi.h>
 #include <trace/events/net.h>
@@ -683,7 +684,8 @@ struct net_device *__dev_get_by_name(struct net *net, const char *name)
 	hlist_for_each(p, dev_name_hash(net, name)) {
 		struct net_device *dev
 			= hlist_entry(p, struct net_device, name_hlist);
-		if (!strncmp(dev->name, name, IFNAMSIZ))
+		if (!strncmp(dev->name, name, IFNAMSIZ) &&
+		    nx_dev_visible(current_nx_info(), dev))
 			return dev;
 	}
 	return NULL;
@@ -734,7 +736,8 @@ struct net_device *__dev_get_by_index(struct net *net, int ifindex)
 	hlist_for_each(p, dev_index_hash(net, ifindex)) {
 		struct net_device *dev
 			= hlist_entry(p, struct net_device, index_hlist);
-		if (dev->ifindex == ifindex)
+		if ((dev->ifindex == ifindex) &&
+		    nx_dev_visible(current_nx_info(), dev))
 			return dev;
 	}
 	return NULL;
@@ -787,10 +790,12 @@ struct net_device *dev_getbyhwaddr(struct net *net, unsigned short type, char *h
 
 	ASSERT_RTNL();
 
-	for_each_netdev(net, dev)
+	for_each_netdev(net, dev) {
 		if (dev->type == type &&
-		    !memcmp(dev->dev_addr, ha, dev->addr_len))
+		    !memcmp(dev->dev_addr, ha, dev->addr_len) &&
+		    nx_dev_visible(current_nx_info(), dev))
 			return dev;
+	}
 
 	return NULL;
 }
@@ -801,9 +806,11 @@ struct net_device *__dev_getfirstbyhwtype(struct net *net, unsigned short type)
 	struct net_device *dev;
 
 	ASSERT_RTNL();
-	for_each_netdev(net, dev)
-		if (dev->type == type)
+	for_each_netdev(net, dev) {
+		if ((dev->type == type) &&
+		    nx_dev_visible(current_nx_info(), dev))
 			return dev;
+	}
 
 	return NULL;
 }
@@ -921,6 +928,8 @@ static int __dev_alloc_name(struct net *net, const char *name, char *buf)
 			if (!sscanf(d->name, name, &i))
 				continue;
 			if (i < 0 || i >= max_netdevices)
+				continue;
+			if (!nx_dev_visible(current_nx_info(), d))
 				continue;
 
 			/*  avoid cases where sscanf is not exact inverse of printf */
@@ -4288,6 +4297,8 @@ static int dev_ifconf(struct net *net, char __user *arg)
 
 	total = 0;
 	for_each_netdev(net, dev) {
+		if (!nx_dev_visible(current_nx_info(), dev))
+			continue;
 		for (i = 0; i < NPROTO; i++) {
 			if (gifconf_list[i]) {
 				int done;
@@ -4356,6 +4367,9 @@ static void dev_seq_printf_stats(struct seq_file *seq, struct net_device *dev)
 {
 	struct rtnl_link_stats64 temp;
 	const struct rtnl_link_stats64 *stats = dev_get_stats64(dev, &temp);
+
+	if (!nx_dev_visible(current_nx_info(), dev))
+		return;
 
 	seq_printf(seq, "%6s: %7llu %7llu %4llu %4llu %4llu %5llu %10llu %9llu "
 		   "%8llu %7llu %4llu %4llu %4llu %5llu %7llu %10llu\n",
@@ -7173,7 +7187,6 @@ int dev_change_net_namespace(struct net_device *dev, struct net *net, const char
 		goto out;
 	}
 #endif
-
 	/* Ensure the device has been registrered */
 	err = -EINVAL;
 	if (dev->reg_state != NETREG_REGISTERED)

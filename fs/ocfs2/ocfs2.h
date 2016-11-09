@@ -248,6 +248,7 @@ enum ocfs2_mount_options
 	OCFS2_MOUNT_POSIX_ACL = 1 << 8,	/* POSIX access control lists */
 	OCFS2_MOUNT_USRQUOTA = 1 << 9, /* We support user quotas */
 	OCFS2_MOUNT_GRPQUOTA = 1 << 10, /* We support group quotas */
+	OCFS2_MOUNT_TAGGED = 1 << 11, /* use tagging */
 };
 
 #define OCFS2_OSB_SOFT_RO			0x0001

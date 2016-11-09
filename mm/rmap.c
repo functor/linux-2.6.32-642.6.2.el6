@@ -58,6 +58,7 @@
 #include <linux/migrate.h>
 #include <linux/hugetlb.h>
 #include <linux/backing-dev.h>
+#include <linux/vs_memory.h>
 #include <trace/events/kmem.h>
 
 #include <asm/tlbflush.h>

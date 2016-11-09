@@ -1332,7 +1332,8 @@ munmap_back:
 out:
 	perf_event_mmap(vma);
 
-	mm->total_vm += len >> PAGE_SHIFT;
+	// mm->total_vm += len >> PAGE_SHIFT;
+	vx_vmpages_add(mm, len >> PAGE_SHIFT);
 	vm_stat_account(mm, vm_flags, file, len >> PAGE_SHIFT);
 	if (vm_flags & VM_LOCKED) {
 		/*
@@ -1341,7 +1342,8 @@ out:
 		long nr_pages = mlock_vma_pages_range(vma, addr, addr + len);
 		if (nr_pages < 0)
 			return nr_pages;	/* vma gone! */
-		mm->locked_vm += (len >> PAGE_SHIFT) - nr_pages;
+		// mm->locked_vm += (len >> PAGE_SHIFT) - nr_pages;
+		vx_vmlocked_add(mm, (len >> PAGE_SHIFT) - nr_pages);
 	} else if ((flags & MAP_POPULATE) && !(flags & MAP_NONBLOCK))
 		make_pages_present(addr, addr + len);
 	return addr;
@@ -1867,9 +1869,9 @@ static int acct_stack_growth(struct vm_area_struct *vma, unsigned long size, uns
 		return -ENOMEM;
 
 	/* Ok, everything looks good - let it rip */
-	mm->total_vm += grow;
+	vx_vmpages_add(mm, grow);
 	if (vma->vm_flags & VM_LOCKED)
-		mm->locked_vm += grow;
+		vx_vmlocked_add(mm, grow);
 	vm_stat_account(mm, vma->vm_flags, vma->vm_file, grow);
 	return 0;
 }
@@ -2053,7 +2055,8 @@ static void remove_vma_list(struct mm_struct *mm, struct vm_area_struct *vma)
 	do {
 		long nrpages = vma_pages(vma);
 
-		mm->total_vm -= nrpages;
+		// mm->total_vm -= nrpages;
+		vx_vmpages_sub(mm, nrpages);
 		if (unlikely(unmap_factor))
 			mm->cached_hole_size += nrpages;
 		vm_stat_account(mm, vma->vm_flags, vma->vm_file, -nrpages);
@@ -2278,7 +2281,8 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len)
 		struct vm_area_struct *tmp = vma;
 		while (tmp && tmp->vm_start < end) {
 			if (tmp->vm_flags & VM_LOCKED) {
-				mm->locked_vm -= vma_pages(tmp);
+				// mm->locked_vm -= vma_pages(tmp);
+				vx_vmlocked_sub(mm, vma_pages(tmp));
 				munlock_vma_pages_all(tmp);
 			}
 			tmp = tmp->vm_next;
@@ -2361,6 +2365,8 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 		lock_limit >>= PAGE_SHIFT;
 		if (locked > lock_limit && !capable(CAP_IPC_LOCK))
 			return -EAGAIN;
+		if (!vx_vmlocked_avail(mm, len >> PAGE_SHIFT))
+			return -ENOMEM;
 	}
 
 	/*
@@ -2387,7 +2393,8 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	if (mm->map_count > sysctl_max_map_count)
 		return -ENOMEM;
 
-	if (security_vm_enough_memory(len >> PAGE_SHIFT))
+	if (security_vm_enough_memory(len >> PAGE_SHIFT) ||
+		!vx_vmpages_avail(mm, len >> PAGE_SHIFT))
 		return -ENOMEM;
 
 	/* Can we just expand an old private anonymous mapping? */
@@ -2415,10 +2422,13 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	vma_link(mm, vma, prev, rb_link, rb_parent);
 out:
 	perf_event_mmap(vma);
-	mm->total_vm += len >> PAGE_SHIFT;
+	// mm->total_vm += len >> PAGE_SHIFT;
+	vx_vmpages_add(mm, len >> PAGE_SHIFT);
+
 	if (flags & VM_LOCKED) {
 		if (!mlock_vma_pages_range(vma, addr, addr + len))
-			mm->locked_vm += (len >> PAGE_SHIFT);
+			// mm->locked_vm += (len >> PAGE_SHIFT);
+			vx_vmlocked_add(mm, len >> PAGE_SHIFT);
 	}
 	return addr;
 }
@@ -2462,6 +2472,11 @@ void exit_mmap(struct mm_struct *mm)
 	tlb_finish_mmu(tlb, 0, end);
 	arch_flush_exec_range(mm);
 
+	set_mm_counter(mm, file_rss, 0);
+	set_mm_counter(mm, anon_rss, 0);
+	vx_vmpages_sub(mm, mm->total_vm);
+	vx_vmlocked_sub(mm, mm->locked_vm);
+
 	/*
 	 * Walk the list again, actually closing and freeing it,
 	 * with preemption enabled, without holding any MM locks.
@@ -2501,7 +2516,8 @@ int insert_vm_struct(struct mm_struct * mm, struct vm_area_struct * vma)
 	if (__vma && __vma->vm_start < vma->vm_end)
 		return -ENOMEM;
 	if ((vma->vm_flags & VM_ACCOUNT) &&
-	     security_vm_enough_memory_mm(mm, vma_pages(vma)))
+		(security_vm_enough_memory_mm(mm, vma_pages(vma)) ||
+		!vx_vmpages_avail(mm, vma_pages(vma))))
 		return -ENOMEM;
 	vma_link(mm, vma, prev, rb_link, rb_parent);
 	return 0;
@@ -2602,6 +2618,8 @@ int may_expand_vm(struct mm_struct *mm, unsigned long npages)
 
 	if (cur + npages > lim)
 		return 0;
+	if (!vx_vmpages_avail(mm, npages))
+		return 0;
 	return 1;
 }
 
@@ -2684,7 +2702,7 @@ int install_special_mapping(struct mm_struct *mm,
 	if (ret)
 		goto out;
 
-	mm->total_vm += len >> PAGE_SHIFT;
+	vx_vmpages_add(mm, len >> PAGE_SHIFT);
 
 	perf_event_mmap(vma);
 

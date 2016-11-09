@@ -21,6 +21,7 @@
 #include <linux/ctype.h>
 #include <linux/quotaops.h>
 #include <linux/exportfs.h>
+#include <linux/vs_tag.h>
 #include "jfs_incore.h"
 #include "jfs_superblock.h"
 #include "jfs_inode.h"
@@ -1476,6 +1477,7 @@ static struct dentry *jfs_lookup(struct inode *dip, struct dentry *dentry, struc
 		return ERR_CAST(ip);
 	}
 
+	dx_propagate_tag(nd, ip);
 	dentry = d_splice_alias(ip, dentry);
 
 	if (dentry && (JFS_SBI(dip->i_sb)->mntflag & JFS_OS2))
@@ -1545,6 +1547,7 @@ const struct inode_operations jfs_dir_inode_operations = {
 	.setattr	= jfs_setattr,
 	.check_acl	= jfs_check_acl,
 #endif
+	.sync_flags	= jfs_sync_flags,
 };
 
 const struct file_operations jfs_dir_operations = {

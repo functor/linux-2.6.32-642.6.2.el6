@@ -230,5 +230,6 @@ const struct inode_operations ext4_file_inode_operations = {
 	.check_acl	= ext4_check_acl,
 	.fallocate	= ext4_fallocate,
 	.fiemap		= ext4_fiemap,
+	.sync_flags	= ext4_sync_flags,
 };
 

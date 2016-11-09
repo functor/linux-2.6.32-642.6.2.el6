@@ -865,7 +865,7 @@ SYSCALL_DEFINE2(osf_gettimeofday, struct timeval32 __user *, tv,
 {
 	if (tv) {
 		struct timeval ktv;
-		do_gettimeofday(&ktv);
+		vx_gettimeofday(&ktv);
 		if (put_tv32(tv, &ktv))
 			return -EFAULT;
 	}

@@ -13,6 +13,8 @@
 #include <linux/mount.h>
 #include <linux/user_namespace.h>
 #include <linux/proc_fs.h>
+#include <linux/vs_base.h>
+#include <linux/vserver/global.h>
 
 #include "util.h"
 

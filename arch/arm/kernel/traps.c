@@ -234,8 +234,8 @@ static void __die(const char *str, int err, struct thread_info *thread, struct p
 	sysfs_printk_last_file();
 	print_modules();
 	__show_regs(regs);
-	printk(KERN_EMERG "Process %.*s (pid: %d, stack limit = 0x%p)\n",
-		TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk), thread + 1);
+	printk(KERN_EMERG "Process %.*s (pid: %d:#%u, stack limit = 0x%p)\n",
+		TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk), tsk->xid, thread + 1);
 
 	if (!user_mode(regs) || in_interrupt()) {
 		dump_mem(KERN_EMERG, "Stack: ", regs->ARM_sp,

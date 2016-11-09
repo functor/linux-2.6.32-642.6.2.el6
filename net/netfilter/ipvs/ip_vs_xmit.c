@@ -137,9 +137,10 @@ __ip_vs_get_out_rt(struct sk_buff *skb, struct ip_vs_conn *cp, u32 rtos)
 #ifdef CONFIG_IP_VS_IPV6
 
 static struct dst_entry *
-__ip_vs_route_output_v6(struct net *net, struct in6_addr *daddr,
+__ip_vs_route_output_v6(struct sk_buff *skb, struct in6_addr *daddr,
 			struct in6_addr *ret_saddr, int do_xfrm)
 {
+	struct net *net = dev_net(skb->dev);
 	struct dst_entry *dst;
 	struct flowi fl = {
 		.oif = 0,
@@ -157,7 +158,7 @@ __ip_vs_route_output_v6(struct net *net, struct in6_addr *daddr,
 		return dst;
 	if (ipv6_addr_any(&fl.fl6_src) &&
 	    ipv6_dev_get_saddr(net, ip6_dst_idev(dst)->dev,
-			       &fl.fl6_dst, 0, &fl.fl6_src) < 0)
+			       &fl.fl6_dst, 0, &fl.fl6_src, (skb->sk ? skb->sk->sk_nx_info : NULL)) < 0)
 		goto out_err;
 	if (do_xfrm && xfrm_lookup(net, &dst, &fl, NULL, 0) < 0)
 		goto out_err;
@@ -174,7 +175,6 @@ static struct rt6_info *
 __ip_vs_get_out_rt_v6(struct sk_buff *skb, struct ip_vs_conn *cp,
 		      struct in6_addr *ret_saddr, int do_xfrm)
 {
-	struct net *net = dev_net(skb->dev);
 	struct rt6_info *rt;			/* Route to the other host */
 	struct ip_vs_dest *dest = cp->dest;
 	struct dst_entry *dst;
@@ -185,7 +185,7 @@ __ip_vs_get_out_rt_v6(struct sk_buff *skb, struct ip_vs_conn *cp,
 		if (!rt) {
 			u32 cookie;
 
-			dst = __ip_vs_route_output_v6(net, &dest->addr.in6,
+			dst = __ip_vs_route_output_v6(skb, &dest->addr.in6,
 						      &dest->dst_saddr,
 						      do_xfrm);
 			if (!dst) {
@@ -203,7 +203,7 @@ __ip_vs_get_out_rt_v6(struct sk_buff *skb, struct ip_vs_conn *cp,
 			ipv6_addr_copy(ret_saddr, &dest->dst_saddr);
 		spin_unlock(&dest->dst_lock);
 	} else {
-		dst = __ip_vs_route_output_v6(net, &cp->daddr.in6, ret_saddr,
+		dst = __ip_vs_route_output_v6(skb, &cp->daddr.in6, ret_saddr,
 					      do_xfrm);
 		if (!dst)
 			return NULL;
@@ -325,7 +325,6 @@ int
 ip_vs_bypass_xmit_v6(struct sk_buff *skb, struct ip_vs_conn *cp,
 		     struct ip_vs_protocol *pp)
 {
-	struct net *net = dev_net(skb->dev);
 	struct dst_entry *dst;
 	struct rt6_info *rt;			/* Route to the other host */
 	struct ipv6hdr  *iph = ipv6_hdr(skb);
@@ -333,7 +332,7 @@ ip_vs_bypass_xmit_v6(struct sk_buff *skb, struct ip_vs_conn *cp,
 
 	EnterFunction(10);
 
-	dst = __ip_vs_route_output_v6(net, &iph->daddr, NULL, 0);
+	dst = __ip_vs_route_output_v6(skb, &iph->daddr, NULL, 0);
 	if (!dst)
 		goto tx_error_icmp;
 	rt = (struct rt6_info *) dst;

@@ -397,24 +397,27 @@ extern void arch_unmap_area_topdown(struct mm_struct *, unsigned long);
  * The mm counters are not protected by its page_table_lock,
  * so must be incremented atomically.
  */
-#define set_mm_counter(mm, member, value) atomic_long_set(&(mm)->_##member, value)
-#define get_mm_counter(mm, member) ((unsigned long)atomic_long_read(&(mm)->_##member))
-#define add_mm_counter(mm, member, value) atomic_long_add(value, &(mm)->_##member)
-#define inc_mm_counter(mm, member) atomic_long_inc(&(mm)->_##member)
-#define dec_mm_counter(mm, member) atomic_long_dec(&(mm)->_##member)
+#define __set_mm_counter(mm, member, value) \
+	atomic_long_set(&(mm)->_##member, value)
+#define get_mm_counter(mm, member) \
+	((unsigned long)atomic_long_read(&(mm)->_##member))
 
 #else  /* !USE_SPLIT_PTLOCKS */
 /*
  * The mm counters are protected by its page_table_lock,
  * so can be incremented directly.
  */
-#define set_mm_counter(mm, member, value) (mm)->_##member = (value)
+#define __set_mm_counter(mm, member, value) (mm)->_##member = (value)
 #define get_mm_counter(mm, member) ((mm)->_##member)
-#define add_mm_counter(mm, member, value) (mm)->_##member += (value)
-#define inc_mm_counter(mm, member) (mm)->_##member++
-#define dec_mm_counter(mm, member) (mm)->_##member--
 
 #endif /* !USE_SPLIT_PTLOCKS */
+
+#define set_mm_counter(mm, member, value) \
+	vx_ ## member ## pages_sub((mm), (get_mm_counter(mm, member) - value))
+#define add_mm_counter(mm, member, value) \
+	vx_ ## member ## pages_add((mm), (value))
+#define inc_mm_counter(mm, member) vx_ ## member ## pages_inc((mm))
+#define dec_mm_counter(mm, member) vx_ ## member ## pages_dec((mm))
 
 #define get_mm_rss(mm)					\
 	(get_mm_counter(mm, file_rss) + get_mm_counter(mm, anon_rss))
@@ -1295,6 +1298,12 @@ struct sched_entity {
 	u64			nr_wakeups_affine_attempts;
 	u64			nr_wakeups_passive;
 	u64			nr_wakeups_idle;
+#ifdef CONFIG_CFS_HARD_LIMITS
+	u64			throttle_start;
+	u64			throttle_max;
+	u64			throttle_count;
+	u64			throttle_sum;
+#endif
 #endif
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -1522,6 +1531,14 @@ struct task_struct {
 	struct utrace *utrace;
 	unsigned long utrace_flags;
 #endif
+
+/* vserver context data */
+	struct vx_info *vx_info;
+	struct nx_info *nx_info;
+
+	xid_t xid;
+	nid_t nid;
+	tag_t tag;
 
 /* Thread group tracking */
    	u32 parent_exec_id;
@@ -1792,6 +1809,11 @@ struct pid_namespace;
 pid_t __task_pid_nr_ns(struct task_struct *task, enum pid_type type,
 			struct pid_namespace *ns);
 
+#include <linux/vserver/base.h>
+#include <linux/vserver/context.h>
+#include <linux/vserver/debug.h>
+#include <linux/vserver/pid.h>
+
 static inline pid_t task_pid_nr(struct task_struct *tsk)
 {
 	return tsk->pid;
@@ -1805,7 +1827,8 @@ static inline pid_t task_pid_nr_ns(struct task_struct *tsk,
 
 static inline pid_t task_pid_vnr(struct task_struct *tsk)
 {
-	return __task_pid_nr_ns(tsk, PIDTYPE_PID, NULL);
+	// return __task_pid_nr_ns(tsk, PIDTYPE_PID, NULL);
+	return vx_map_pid(__task_pid_nr_ns(tsk, PIDTYPE_PID, NULL));
 }
 
 
@@ -1818,7 +1841,7 @@ pid_t task_tgid_nr_ns(struct task_struct *tsk, struct pid_namespace *ns);
 
 static inline pid_t task_tgid_vnr(struct task_struct *tsk)
 {
-	return pid_vnr(task_tgid(tsk));
+	return vx_map_tgid(pid_vnr(task_tgid(tsk)));
 }
 
 

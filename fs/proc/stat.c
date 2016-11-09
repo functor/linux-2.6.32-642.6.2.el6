@@ -10,8 +10,10 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 #include <linux/irqnr.h>
+#include <linux/cpuset.h>
 #include <asm/cputime.h>
 #include <linux/tick.h>
+#include <linux/vserver/cvirt.h>
 
 #ifndef arch_irq_stat_cpu
 #define arch_irq_stat_cpu(cpu) 0
@@ -84,14 +86,24 @@ static int show_stat(struct seq_file *p, void *v)
 	u64 sum_softirq = 0;
 	unsigned int per_softirq_sums[NR_SOFTIRQS] = {0};
 	struct timespec boottime;
+	struct cpumask mask;
 
 	user = nice = system = idle = iowait =
 		irq = softirq = steal = cputime64_zero;
 	guest = cputime64_zero;
 	getboottime(&boottime);
+
+	if (vx_flags(VXF_VIRT_UPTIME, 0))
+		vx_vsi_boottime(&boottime);
+
 	jif = boottime.tv_sec;
 
+	cpuset_cpus_allowed(current, &mask);
+
 	for_each_possible_cpu(i) {
+		if (!cpumask_test_cpu(i, &mask))
+			continue;
+
 		user = cputime64_add(user, kstat_cpu(i).cpustat.user);
 		nice = cputime64_add(nice, kstat_cpu(i).cpustat.nice);
 		system = cputime64_add(system, kstat_cpu(i).cpustat.system);
@@ -124,6 +136,9 @@ static int show_stat(struct seq_file *p, void *v)
 		(unsigned long long)cputime64_to_clock_t(steal),
 		(unsigned long long)cputime64_to_clock_t(guest));
 	for_each_online_cpu(i) {
+		if (!cpumask_test_cpu(i, &mask))
+			continue;
+
 		/* Copy values here to work around gcc-2.95.3, gcc-2.96 */
 		user = kstat_cpu(i).cpustat.user;
 		nice = kstat_cpu(i).cpustat.nice;

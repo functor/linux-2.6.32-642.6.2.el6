@@ -30,6 +30,7 @@
 #include "xfs_bmap_btree.h"
 #include "xfs_dinode.h"
 #include "xfs_inode.h"
+#include "xfs_ioctl.h"
 #include "xfs_bmap.h"
 #include "xfs_rtalloc.h"
 #include "xfs_error.h"
@@ -49,6 +50,7 @@
 #include <linux/falloc.h>
 #include <linux/fiemap.h>
 #include <linux/slab.h>
+#include <linux/vs_tag.h>
 
 /*
  * Hook in SELinux.  This is not quite correct yet, what we really need
@@ -420,6 +422,7 @@ xfs_vn_getattr(
 	stat->nlink = ip->i_d.di_nlink;
 	stat->uid = ip->i_d.di_uid;
 	stat->gid = ip->i_d.di_gid;
+	stat->tag = ip->i_d.di_tag;
 	stat->ino = ip->i_ino;
 	stat->atime = inode->i_atime;
 	stat->mtime = inode->i_mtime;
@@ -623,6 +626,7 @@ static const struct inode_operations xfs_inode_operations = {
 	.listxattr		= xfs_vn_listxattr,
 	.fallocate		= xfs_vn_fallocate,
 	.fiemap			= xfs_vn_fiemap,
+	.sync_flags		= xfs_sync_flags,
 };
 
 static const struct inode_operations xfs_dir_inode_operations = {
@@ -648,6 +652,7 @@ static const struct inode_operations xfs_dir_inode_operations = {
 	.getxattr		= generic_getxattr,
 	.removexattr		= generic_removexattr,
 	.listxattr		= xfs_vn_listxattr,
+	.sync_flags		= xfs_sync_flags,
 };
 
 static const struct inode_operations xfs_dir_ci_inode_operations = {
@@ -697,6 +702,10 @@ xfs_diflags_to_iflags(
 		inode->i_flags |= S_IMMUTABLE;
 	else
 		inode->i_flags &= ~S_IMMUTABLE;
+	if (ip->i_d.di_flags & XFS_DIFLAG_IXUNLINK)
+		inode->i_flags |= S_IXUNLINK;
+	else
+		inode->i_flags &= ~S_IXUNLINK;
 	if (ip->i_d.di_flags & XFS_DIFLAG_APPEND)
 		inode->i_flags |= S_APPEND;
 	else
@@ -709,6 +718,15 @@ xfs_diflags_to_iflags(
 		inode->i_flags |= S_NOATIME;
 	else
 		inode->i_flags &= ~S_NOATIME;
+
+	if (ip->i_d.di_vflags & XFS_DIVFLAG_BARRIER)
+		inode->i_vflags |= V_BARRIER;
+	else
+		inode->i_vflags &= ~V_BARRIER;
+	if (ip->i_d.di_vflags & XFS_DIVFLAG_COW)
+		inode->i_vflags |= V_COW;
+	else
+		inode->i_vflags &= ~V_COW;
 }
 
 /*
@@ -738,6 +756,7 @@ xfs_setup_inode(
 	inode->i_nlink	= ip->i_d.di_nlink;
 	inode->i_uid	= ip->i_d.di_uid;
 	inode->i_gid	= ip->i_d.di_gid;
+	inode->i_tag    = ip->i_d.di_tag;
 
 	switch (inode->i_mode & S_IFMT) {
 	case S_IFBLK:

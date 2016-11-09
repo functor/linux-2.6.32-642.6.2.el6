@@ -75,6 +75,7 @@
 #include <linux/kthread.h>
 #include <linux/splice.h>
 #include <linux/falloc.h>
+#include <linux/vs_context.h>
 
 #include <asm/uaccess.h>
 
@@ -781,6 +782,7 @@ static int loop_set_fd(struct loop_device *lo, fmode_t mode,
 	lo->lo_blocksize = lo_blocksize;
 	lo->lo_device = bdev;
 	lo->lo_flags = lo_flags;
+	lo->lo_xid = vx_current_xid();
 	lo->lo_backing_file = file;
 	lo->transfer = transfer_none;
 	lo->ioctl = NULL;
@@ -901,6 +903,7 @@ static int loop_clr_fd(struct loop_device *lo, struct block_device *bdev)
 	lo->lo_encrypt_key_size = 0;
 	lo->lo_flags = 0;
 	lo->lo_thread = NULL;
+	lo->lo_xid = 0;
 	memset(lo->lo_encrypt_key, 0, LO_KEY_SIZE);
 	memset(lo->lo_crypt_name, 0, LO_NAME_SIZE);
 	memset(lo->lo_file_name, 0, LO_NAME_SIZE);
@@ -935,7 +938,7 @@ loop_set_status(struct loop_device *lo, const struct loop_info64 *info)
 
 	if (lo->lo_encrypt_key_size &&
 	    lo->lo_key_owner != uid &&
-	    !capable(CAP_SYS_ADMIN))
+	    !vx_capable(CAP_SYS_ADMIN, VXC_ADMIN_CLOOP))
 		return -EPERM;
 	if (lo->lo_state != Lo_bound)
 		return -ENXIO;
@@ -1020,7 +1023,8 @@ loop_get_status(struct loop_device *lo, struct loop_info64 *info)
 	memcpy(info->lo_crypt_name, lo->lo_crypt_name, LO_NAME_SIZE);
 	info->lo_encrypt_type =
 		lo->lo_encryption ? lo->lo_encryption->number : 0;
-	if (lo->lo_encrypt_key_size && capable(CAP_SYS_ADMIN)) {
+	if (lo->lo_encrypt_key_size &&
+		vx_capable(CAP_SYS_ADMIN, VXC_ADMIN_CLOOP)) {
 		info->lo_encrypt_key_size = lo->lo_encrypt_key_size;
 		memcpy(info->lo_encrypt_key, lo->lo_encrypt_key,
 		       lo->lo_encrypt_key_size);
@@ -1363,6 +1367,9 @@ static int lo_compat_ioctl(struct block_device *bdev, fmode_t mode,
 static int lo_open(struct block_device *bdev, fmode_t mode)
 {
 	struct loop_device *lo = bdev->bd_disk->private_data;
+
+	if (!vx_check(lo->lo_xid, VS_IDENT|VS_HOSTID|VS_ADMIN_P))
+		return -EACCES;
 
 	mutex_lock(&lo->lo_ctl_mutex);
 	lo->lo_refcnt++;

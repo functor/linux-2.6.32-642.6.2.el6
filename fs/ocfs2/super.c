@@ -173,6 +173,7 @@ enum {
 	Opt_noacl,
 	Opt_usrquota,
 	Opt_grpquota,
+	Opt_tag, Opt_notag, Opt_tagid,
 	Opt_err,
 };
 
@@ -199,6 +200,9 @@ static const match_table_t tokens = {
 	{Opt_noacl, "noacl"},
 	{Opt_usrquota, "usrquota"},
 	{Opt_grpquota, "grpquota"},
+	{Opt_tag, "tag"},
+	{Opt_notag, "notag"},
+	{Opt_tagid, "tagid=%u"},
 	{Opt_err, NULL}
 };
 
@@ -602,6 +606,13 @@ static int ocfs2_remount(struct super_block *sb, int *flags, char *data)
 
 	if (!ocfs2_parse_options(sb, data, &parsed_options, 1)) {
 		ret = -EINVAL;
+		goto out;
+	}
+
+	if ((osb->s_mount_opt & OCFS2_MOUNT_TAGGED) !=
+	    (parsed_options.mount_opt & OCFS2_MOUNT_TAGGED)) {
+		ret = -EINVAL;
+		mlog(ML_ERROR, "Cannot change tagging on remount\n");
 		goto out;
 	}
 
@@ -1148,6 +1159,9 @@ static int ocfs2_fill_super(struct super_block *sb, void *data, int silent)
 
 	ocfs2_complete_mount_recovery(osb);
 
+	if (osb->s_mount_opt & OCFS2_MOUNT_TAGGED)
+		sb->s_flags |= MS_TAGGED;
+
 	if (ocfs2_mount_local(osb))
 		snprintf(nodestr, sizeof(nodestr), "local");
 	else
@@ -1424,6 +1438,20 @@ static int ocfs2_parse_options(struct super_block *sb,
 		case Opt_acl:
 		case Opt_noacl:
 			printk(KERN_INFO "ocfs2 (no)acl options not supported\n");
+			break;
+#endif
+#ifndef CONFIG_TAGGING_NONE
+		case Opt_tag:
+			mopt->mount_opt |= OCFS2_MOUNT_TAGGED;
+			break;
+		case Opt_notag:
+			mopt->mount_opt &= ~OCFS2_MOUNT_TAGGED;
+			break;
+#endif
+#ifdef CONFIG_PROPAGATE
+		case Opt_tagid:
+			/* use args[0] */
+			mopt->mount_opt |= OCFS2_MOUNT_TAGGED;
 			break;
 #endif
 		default:

@@ -262,6 +262,7 @@ struct mm_struct {
 
 	/* Architecture-specific MM context */
 	mm_context_t context;
+	struct vx_info *mm_vx_info;
 
 	/* Swap token stuff */
 	/*

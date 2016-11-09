@@ -11,6 +11,7 @@
 #include <linux/mount.h>
 #include <linux/time.h>
 #include <linux/sched.h>
+#include <linux/mount.h>
 #include <asm/current.h>
 #include <asm/uaccess.h>
 
@@ -52,6 +53,16 @@ static long jfs_map_ext2(unsigned long flags, int from)
 }
 
 
+int jfs_sync_flags(struct inode *inode, int flags, int vflags)
+{
+	inode->i_flags = flags;
+	inode->i_vflags = vflags;
+	jfs_get_inode_flags(JFS_IP(inode));
+	inode->i_ctime = CURRENT_TIME_SEC;
+	mark_inode_dirty(inode);
+	return 0;
+}
+
 long jfs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
@@ -85,6 +96,11 @@ long jfs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (!S_ISDIR(inode->i_mode))
 			flags &= ~JFS_DIRSYNC_FL;
 
+		if (IS_BARRIER(inode)) {
+			vxwprintk_task(1, "messing with the barrier.");
+			return -EACCES;
+		}
+
 		/* Is it quota file? Do not allow user to mess with it */
 		if (IS_NOQUOTA(inode)) {
 			err = -EPERM;
@@ -102,8 +118,8 @@ long jfs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		 * the relevant capability.
 		 */
 		if ((oldflags & JFS_IMMUTABLE_FL) ||
-			((flags ^ oldflags) &
-			(JFS_APPEND_FL | JFS_IMMUTABLE_FL))) {
+			((flags ^ oldflags) & (JFS_APPEND_FL |
+			JFS_IMMUTABLE_FL | JFS_IXUNLINK_FL))) {
 			if (!capable(CAP_LINUX_IMMUTABLE)) {
 				mutex_unlock(&inode->i_mutex);
 				err = -EPERM;
@@ -111,7 +127,7 @@ long jfs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			}
 		}
 
-		flags = flags & JFS_FL_USER_MODIFIABLE;
+		flags &= JFS_FL_USER_MODIFIABLE;
 		flags |= oldflags & ~JFS_FL_USER_MODIFIABLE;
 		jfs_inode->mode2 = flags;
 

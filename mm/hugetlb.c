@@ -28,6 +28,7 @@
 #include <asm/io.h>
 
 #include <linux/hugetlb.h>
+#include <linux/vs_memory.h>
 #include <linux/node.h>
 #include "internal.h"
 

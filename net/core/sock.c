@@ -130,6 +130,10 @@
 #include <net/netprio_cgroup.h>
 
 #include <linux/filter.h>
+#include <linux/vs_socket.h>
+#include <linux/vs_limit.h>
+#include <linux/vs_context.h>
+#include <linux/vs_network.h>
 
 #include <trace/events/sock.h>
 
@@ -1096,6 +1100,8 @@ static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority,
 		sk->sk_prot_creator = prot;
 		sk_tx_queue_clear(sk);
 	}
+		sock_vx_init(sk);
+		sock_nx_init(sk);
 
 	return sk;
 
@@ -1204,6 +1210,11 @@ static void __sk_free(struct sock *sk)
 		put_cred(sk_extended(sk)->sk_peer_cred);
 	put_pid(sk_extended(sk)->sk_peer_pid);
 	put_net(sock_net(sk));
+	vx_sock_dec(sk);
+	clr_vx_info(&sk->sk_vx_info);
+	sk->sk_xid = -1;
+	clr_nx_info(&sk->sk_nx_info);
+	sk->sk_nid = -1;
 	sk_prot_free(sk->sk_prot_creator, sk);
 }
 
@@ -1251,6 +1262,8 @@ struct sock *sk_clone(const struct sock *sk, const gfp_t priority)
 
 		/* SANITY */
 		get_net(sock_net(newsk));
+		sock_vx_init(newsk);
+		sock_nx_init(newsk);
 		sk_node_init(&newsk->sk_node);
 		sock_lock_init(newsk);
 		bh_lock_sock(newsk);
@@ -1305,6 +1318,12 @@ struct sock *sk_clone(const struct sock *sk, const gfp_t priority)
 		 */
 		smp_wmb();
 		atomic_set(&newsk->sk_refcnt, 2);
+
+		set_vx_info(&newsk->sk_vx_info, sk->sk_vx_info);
+		newsk->sk_xid = sk->sk_xid;
+		vx_sock_inc(newsk);
+		set_nx_info(&newsk->sk_nx_info, sk->sk_nx_info);
+		newsk->sk_nid = sk->sk_nid;
 
 		/*
 		 * Increment the counter in the same struct proto as the master
@@ -2026,6 +2045,12 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	sk->sk_sndtimeo		=	MAX_SCHEDULE_TIMEOUT;
 
 	sk->sk_stamp = ktime_set(-1L, 0);
+
+	set_vx_info(&sk->sk_vx_info, current_vx_info());
+	sk->sk_xid = vx_current_xid();
+	vx_sock_inc(sk);
+	set_nx_info(&sk->sk_nx_info, current_nx_info());
+	sk->sk_nid = nx_current_nid();
 
 #ifdef CONFIG_NET_RX_BUSY_POLL
 	sk_extended(sk)->sk_napi_id =	0;

@@ -14,6 +14,7 @@
 #include <linux/security.h>
 #include <linux/syscalls.h>
 #include <linux/pid_namespace.h>
+#include <linux/vs_context.h>
 #include <asm/uaccess.h>
 #include "cred-internals.h"
 
@@ -121,6 +122,7 @@ static int cap_validate_magic(cap_user_header_t header, unsigned *tocopy)
 
 	return 0;
 }
+
 
 /*
  * The only thing that can change the capabilities of the current
@@ -289,6 +291,8 @@ error:
 	return ret;
 }
 
+#include <linux/vserver/base.h>
+
 /**
  * file_init_ns_capable - Determine if the file's opener had a capability in effect
  * @file:  The file we want to check
@@ -327,6 +331,9 @@ EXPORT_SYMBOL(file_init_ns_capable);
  */
 int capable(int cap)
 {
+	/* here for now so we don't require task locking */
+	if (vs_check_bit(VXC_CAP_MASK, cap) && !vx_mcaps(1L << cap))
+		return 0;
 	if (unlikely(!cap_valid(cap))) {
 		printk(KERN_CRIT "capable() called with invalid cap=%u\n", cap);
 		BUG();

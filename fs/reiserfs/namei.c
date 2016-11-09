@@ -17,6 +17,7 @@
 #include <linux/reiserfs_acl.h>
 #include <linux/reiserfs_xattr.h>
 #include <linux/quotaops.h>
+#include <linux/vs_tag.h>
 
 #define INC_DIR_INODE_NLINK(i) if (i->i_nlink != 1) { inc_nlink(i); if (i->i_nlink >= REISERFS_LINK_MAX) i->i_nlink=1; }
 #define DEC_DIR_INODE_NLINK(i) if (i->i_nlink != 1) drop_nlink(i);
@@ -354,6 +355,7 @@ static struct dentry *reiserfs_lookup(struct inode *dir, struct dentry *dentry,
 	if (retval == IO_ERROR) {
 		return ERR_PTR(-EIO);
 	}
+		dx_propagate_tag(nd, inode);
 
 	return d_splice_alias(inode, dentry);
 }
@@ -570,6 +572,7 @@ static int new_inode_init(struct inode *inode, struct inode *dir, int mode)
 	} else {
 		inode->i_gid = current_fsgid();
 	}
+	inode->i_tag = dx_current_fstag(inode->i_sb);
 	vfs_dq_init(inode);
 	return 0;
 }
@@ -1515,6 +1518,7 @@ const struct inode_operations reiserfs_dir_inode_operations = {
 	.listxattr = reiserfs_listxattr,
 	.removexattr = reiserfs_removexattr,
 	.permission = reiserfs_permission,
+	.sync_flags = reiserfs_sync_flags,
 };
 
 /*

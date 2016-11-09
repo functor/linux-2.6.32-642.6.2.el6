@@ -47,6 +47,7 @@
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <linux/module.h>
+#include <linux/vs_context.h>
 
 /*
  * Management arrays for POSIX timers.	 Timers are kept in slab memory
@@ -315,6 +316,7 @@ int posix_timer_event(struct k_itimer *timr, int si_private)
 {
 	struct task_struct *task;
 	int shared, ret = -1;
+
 	/*
 	 * FIXME: if ->sigq is queued we can race with
 	 * dequeue_signal()->do_schedule_next_timer().
@@ -331,10 +333,18 @@ int posix_timer_event(struct k_itimer *timr, int si_private)
 	rcu_read_lock();
 	task = pid_task(timr->it_pid, PIDTYPE_PID);
 	if (task) {
+		struct vx_info_save vxis;
+		struct vx_info *vxi;
+
+		vxi = get_vx_info(task->vx_info);
+		enter_vx_info(vxi, &vxis);
 		shared = !(timr->it_sigev_notify & SIGEV_THREAD_ID);
 		ret = send_sigqueue(timr->sigq, task, shared);
+		leave_vx_info(&vxis);
+		put_vx_info(vxi);
 	}
 	rcu_read_unlock();
+
 	/* If we failed to send the signal the timer stops. */
 	return ret > 0;
 }

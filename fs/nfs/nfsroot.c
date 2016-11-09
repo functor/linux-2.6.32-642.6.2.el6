@@ -101,6 +101,70 @@ static __be32 servaddr __initdata = htonl(INADDR_NONE);
 /* Name of directory to mount */
 static char nfs_export_path[NFS_MAXPATHLEN + 1] __initdata = "";
 
+/* NFS-related data */
+static struct nfs_mount_data nfs_data __initdata = { 0, };/* NFS mount info */
+static int nfs_port __initdata = 0;		/* Port to connect to for NFS */
+static int mount_port __initdata = 0;		/* Mount daemon port number */
+
+
+/***************************************************************************
+
+			     Parsing of options
+
+ ***************************************************************************/
+
+enum {
+	/* Options that take integer arguments */
+	Opt_port, Opt_rsize, Opt_wsize, Opt_timeo, Opt_retrans, Opt_acregmin,
+	Opt_acregmax, Opt_acdirmin, Opt_acdirmax, Opt_tagid,
+	/* Options that take no arguments */
+	Opt_soft, Opt_hard, Opt_intr,
+	Opt_nointr, Opt_posix, Opt_noposix, Opt_cto, Opt_nocto, Opt_ac, 
+	Opt_noac, Opt_lock, Opt_nolock, Opt_v2, Opt_v3, Opt_udp, Opt_tcp,
+	Opt_acl, Opt_noacl, Opt_tag, Opt_notag,
+	/* Error token */
+	Opt_err
+};
+
+static const match_table_t tokens __initconst = {
+	{Opt_port, "port=%u"},
+	{Opt_rsize, "rsize=%u"},
+	{Opt_wsize, "wsize=%u"},
+	{Opt_timeo, "timeo=%u"},
+	{Opt_retrans, "retrans=%u"},
+	{Opt_acregmin, "acregmin=%u"},
+	{Opt_acregmax, "acregmax=%u"},
+	{Opt_acdirmin, "acdirmin=%u"},
+	{Opt_acdirmax, "acdirmax=%u"},
+	{Opt_soft, "soft"},
+	{Opt_hard, "hard"},
+	{Opt_intr, "intr"},
+	{Opt_nointr, "nointr"},
+	{Opt_posix, "posix"},
+	{Opt_noposix, "noposix"},
+	{Opt_cto, "cto"},
+	{Opt_nocto, "nocto"},
+	{Opt_ac, "ac"},
+	{Opt_noac, "noac"},
+	{Opt_lock, "lock"},
+	{Opt_nolock, "nolock"},
+	{Opt_v2, "nfsvers=2"},
+	{Opt_v2, "v2"},
+	{Opt_v3, "nfsvers=3"},
+	{Opt_v3, "v3"},
+	{Opt_udp, "proto=udp"},
+	{Opt_udp, "udp"},
+	{Opt_tcp, "proto=tcp"},
+	{Opt_tcp, "tcp"},
+	{Opt_acl, "acl"},
+	{Opt_noacl, "noacl"},
+	{Opt_tag, "tag"},
+	{Opt_notag, "notag"},
+	{Opt_tagid, "tagid=%u"},
+	{Opt_err, NULL}
+	
+};
+
 /* server:export path string passed to super.c */
 static char nfs_root_device[NFS_MAXPATHLEN + 1] __initdata = "";
 
@@ -111,6 +175,127 @@ static char nfs_root_device[NFS_MAXPATHLEN + 1] __initdata = "";
  */
 static int __init nfs_root_debug(char *__unused)
 {
+	char *p;
+	substring_t args[MAX_OPT_ARGS];
+	int option;
+
+	if (!name)
+		return 1;
+
+	/* Set the NFS remote path */
+	p = strsep(&name, ",");
+	if (p[0] != '\0' && strcmp(p, "default") != 0)
+		strlcpy(buf, p, NFS_MAXPATHLEN);
+
+	while ((p = strsep (&name, ",")) != NULL) {
+		int token; 
+		if (!*p)
+			continue;
+		token = match_token(p, tokens, args);
+
+		/* %u tokens only. Beware if you add new tokens! */
+		if (token < Opt_soft && match_int(&args[0], &option))
+			return 0;
+		switch (token) {
+			case Opt_port:
+				nfs_port = option;
+				break;
+			case Opt_rsize:
+				nfs_data.rsize = option;
+				break;
+			case Opt_wsize:
+				nfs_data.wsize = option;
+				break;
+			case Opt_timeo:
+				nfs_data.timeo = option;
+				break;
+			case Opt_retrans:
+				nfs_data.retrans = option;
+				break;
+			case Opt_acregmin:
+				nfs_data.acregmin = option;
+				break;
+			case Opt_acregmax:
+				nfs_data.acregmax = option;
+				break;
+			case Opt_acdirmin:
+				nfs_data.acdirmin = option;
+				break;
+			case Opt_acdirmax:
+				nfs_data.acdirmax = option;
+				break;
+			case Opt_soft:
+				nfs_data.flags |= NFS_MOUNT_SOFT;
+				break;
+			case Opt_hard:
+				nfs_data.flags &= ~NFS_MOUNT_SOFT;
+				break;
+			case Opt_intr:
+			case Opt_nointr:
+				break;
+			case Opt_posix:
+				nfs_data.flags |= NFS_MOUNT_POSIX;
+				break;
+			case Opt_noposix:
+				nfs_data.flags &= ~NFS_MOUNT_POSIX;
+				break;
+			case Opt_cto:
+				nfs_data.flags &= ~NFS_MOUNT_NOCTO;
+				break;
+			case Opt_nocto:
+				nfs_data.flags |= NFS_MOUNT_NOCTO;
+				break;
+			case Opt_ac:
+				nfs_data.flags &= ~NFS_MOUNT_NOAC;
+				break;
+			case Opt_noac:
+				nfs_data.flags |= NFS_MOUNT_NOAC;
+				break;
+			case Opt_lock:
+				nfs_data.flags &= ~NFS_MOUNT_NONLM;
+				break;
+			case Opt_nolock:
+				nfs_data.flags |= NFS_MOUNT_NONLM;
+				break;
+			case Opt_v2:
+				nfs_data.flags &= ~NFS_MOUNT_VER3;
+				break;
+			case Opt_v3:
+				nfs_data.flags |= NFS_MOUNT_VER3;
+				break;
+			case Opt_udp:
+				nfs_data.flags &= ~NFS_MOUNT_TCP;
+				break;
+			case Opt_tcp:
+				nfs_data.flags |= NFS_MOUNT_TCP;
+				break;
+			case Opt_acl:
+				nfs_data.flags &= ~NFS_MOUNT_NOACL;
+				break;
+			case Opt_noacl:
+				nfs_data.flags |= NFS_MOUNT_NOACL;
+				break;
+#ifndef CONFIG_TAGGING_NONE
+			case Opt_tag:
+				nfs_data.flags |= NFS_MOUNT_TAGGED;
+				break;
+			case Opt_notag:
+				nfs_data.flags &= ~NFS_MOUNT_TAGGED;
+				break;
+#endif
+#ifdef CONFIG_PROPAGATE
+			case Opt_tagid:
+				/* use args[0] */
+				nfs_data.flags |= NFS_MOUNT_TAGGED;
+				break;
+#endif
+			default:
+				printk(KERN_WARNING "Root-NFS: unknown "
+					"option: %s\n", p);
+				return 0;
+		}
+	}
+
 	nfs_debug |= NFSDBG_ROOT | NFSDBG_MOUNT;
 	return 1;
 }

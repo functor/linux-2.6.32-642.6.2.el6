@@ -54,6 +54,7 @@
 #include <linux/magic.h>
 #include <linux/parser.h>
 #include <linux/kthread.h>
+#include <linux/vs_tag.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -687,6 +688,7 @@ static void nfs_show_mount_options(struct seq_file *m, struct nfs_server *nfss,
 		{ NFS_MOUNT_NORDIRPLUS, ",nordirplus", "" },
 		{ NFS_MOUNT_UNSHARED, ",nosharecache", "" },
 		{ NFS_MOUNT_NORESVPORT, ",noresvport", "" },
+		{ NFS_MOUNT_TAGGED, ",tag", "" },
 		{ 0, NULL, NULL }
 	};
 	const struct proc_nfs_info *nfs_infop;

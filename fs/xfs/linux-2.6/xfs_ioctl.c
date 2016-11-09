@@ -768,6 +768,10 @@ xfs_merge_ioc_xflags(
 		xflags |= XFS_XFLAG_IMMUTABLE;
 	else
 		xflags &= ~XFS_XFLAG_IMMUTABLE;
+	if (flags & FS_IXUNLINK_FL)
+		xflags |= XFS_XFLAG_IXUNLINK;
+	else
+		xflags &= ~XFS_XFLAG_IXUNLINK;
 	if (flags & FS_APPEND_FL)
 		xflags |= XFS_XFLAG_APPEND;
 	else
@@ -796,6 +800,8 @@ xfs_di2lxflags(
 
 	if (di_flags & XFS_DIFLAG_IMMUTABLE)
 		flags |= FS_IMMUTABLE_FL;
+	if (di_flags & XFS_DIFLAG_IXUNLINK)
+		flags |= FS_IXUNLINK_FL;
 	if (di_flags & XFS_DIFLAG_APPEND)
 		flags |= FS_APPEND_FL;
 	if (di_flags & XFS_DIFLAG_SYNC)
@@ -856,6 +862,8 @@ xfs_set_diflags(
 	di_flags = (ip->i_d.di_flags & XFS_DIFLAG_PREALLOC);
 	if (xflags & XFS_XFLAG_IMMUTABLE)
 		di_flags |= XFS_DIFLAG_IMMUTABLE;
+	if (xflags & XFS_XFLAG_IXUNLINK)
+		di_flags |= XFS_DIFLAG_IXUNLINK;
 	if (xflags & XFS_XFLAG_APPEND)
 		di_flags |= XFS_DIFLAG_APPEND;
 	if (xflags & XFS_XFLAG_SYNC)
@@ -898,6 +906,10 @@ xfs_diflags_to_linux(
 		inode->i_flags |= S_IMMUTABLE;
 	else
 		inode->i_flags &= ~S_IMMUTABLE;
+	if (xflags & XFS_XFLAG_IXUNLINK)
+		inode->i_flags |= S_IXUNLINK;
+	else
+		inode->i_flags &= ~S_IXUNLINK;
 	if (xflags & XFS_XFLAG_APPEND)
 		inode->i_flags |= S_APPEND;
 	else
@@ -1418,10 +1430,18 @@ xfs_file_ioctl(
 	case XFS_IOC_FSGETXATTRA:
 		return xfs_ioc_fsgetxattr(ip, 1, arg);
 	case XFS_IOC_FSSETXATTR:
+		if (IS_BARRIER(inode)) {
+			vxwprintk_task(1, "messing with the barrier.");
+			return -XFS_ERROR(EACCES);
+		}
 		return xfs_ioc_fssetxattr(ip, filp, arg);
 	case XFS_IOC_GETXFLAGS:
 		return xfs_ioc_getxflags(ip, arg);
 	case XFS_IOC_SETXFLAGS:
+		if (IS_BARRIER(inode)) {
+			vxwprintk_task(1, "messing with the barrier.");
+			return -XFS_ERROR(EACCES);
+		}
 		return xfs_ioc_setxflags(ip, filp, arg);
 
 	case XFS_IOC_FSSETDM: {

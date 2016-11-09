@@ -63,6 +63,7 @@ EXPORT_SYMBOL(sys_tz);
 SYSCALL_DEFINE1(time, time_t __user *, tloc)
 {
 	time_t i = get_seconds();
+/*	FIXME: do_gettimeofday(&tv) -> vx_gettimeofday(&tv) */
 
 	if (tloc) {
 		if (put_user(i,tloc))
@@ -93,7 +94,7 @@ SYSCALL_DEFINE1(stime, time_t __user *, tptr)
 	if (err)
 		return err;
 
-	do_settimeofday(&tv);
+	vx_settimeofday(&tv);
 	return 0;
 }
 
@@ -104,7 +105,7 @@ SYSCALL_DEFINE2(gettimeofday, struct timeval __user *, tv,
 {
 	if (likely(tv != NULL)) {
 		struct timeval ktv;
-		do_gettimeofday(&ktv);
+		vx_gettimeofday(&ktv);
 		if (copy_to_user(tv, &ktv, sizeof(ktv)))
 			return -EFAULT;
 	}
@@ -186,7 +187,7 @@ int do_sys_settimeofday(const struct timespec *tv, const struct timezone *tz)
 		/* SMP safe, again the code in arch/foo/time.c should
 		 * globally block out interrupts when it runs.
 		 */
-		return do_settimeofday(tv);
+		return vx_settimeofday(tv);
 	}
 	return 0;
 }
@@ -308,6 +309,7 @@ struct timespec timespec_trunc(struct timespec t, unsigned gran)
 	return t;
 }
 EXPORT_SYMBOL(timespec_trunc);
+
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
  * Assumes input in normal date format, i.e. 1980-12-31 23:59:59

@@ -5,6 +5,7 @@
 #include <linux/seq_file.h>
 #include <linux/time.h>
 #include <linux/kernel_stat.h>
+#include <linux/vserver/cvirt.h>
 #include <asm/cputime.h>
 
 static int uptime_proc_show(struct seq_file *m, void *v)
@@ -20,6 +21,10 @@ static int uptime_proc_show(struct seq_file *m, void *v)
 	do_posix_clock_monotonic_gettime(&uptime);
 	monotonic_to_bootbased(&uptime);
 	cputime_to_timespec(idletime, &idle);
+
+	if (vx_flags(VXF_VIRT_UPTIME, 0))
+		vx_vsi_uptime(&uptime, &idle);
+
 	seq_printf(m, "%lu.%02lu %lu.%02lu\n",
 			(unsigned long) uptime.tv_sec,
 			(uptime.tv_nsec / (NSEC_PER_SEC / 100)),

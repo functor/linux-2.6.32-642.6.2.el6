@@ -60,6 +60,7 @@ struct proc_dir_entry {
 	nlink_t nlink;
 	uid_t uid;
 	gid_t gid;
+	int vx_flags;
 	loff_t size;
 	const struct inode_operations *proc_iops;
 	/*
@@ -279,6 +280,8 @@ kclist_add(struct kcore_list *new, void *addr, size_t size, int type)
 extern void kclist_add(struct kcore_list *, void *, size_t, int type);
 #endif
 
+struct vx_info;
+struct nx_info;
 struct nsproxy;
 struct proc_ns_operations {
 	const char *name;
@@ -300,6 +303,9 @@ union proc_op {
 	int (*proc_show)(struct seq_file *m,
 		struct pid_namespace *ns, struct pid *pid,
 		struct task_struct *task);
+	int (*proc_vs_read)(char *page);
+	int (*proc_vxi_read)(struct vx_info *vxi, char *page);
+	int (*proc_nxi_read)(struct nx_info *nxi, char *page);
 };
 
 struct ctl_table_header;
@@ -307,6 +313,7 @@ struct ctl_table;
 
 struct proc_inode {
 	struct pid *pid;
+	int vx_flags;
 	int fd;
 	union proc_op op;
 	struct proc_dir_entry *pde;

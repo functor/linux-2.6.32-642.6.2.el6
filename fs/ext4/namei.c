@@ -34,6 +34,7 @@
 #include <linux/quotaops.h>
 #include <linux/buffer_head.h>
 #include <linux/bio.h>
+#include <linux/vs_tag.h>
 #include "ext4.h"
 #include "ext4_jbd2.h"
 
@@ -910,6 +911,7 @@ restart:
 				if (bh)
 					ll_rw_block(READ_META, 1, &bh);
 			}
+		dx_propagate_tag(nd, inode);
 		}
 		if ((bh = bh_use[ra_ptr++]) == NULL)
 			goto next;
@@ -2523,6 +2525,7 @@ const struct inode_operations ext4_dir_inode_operations = {
 #endif
 	.check_acl	= ext4_check_acl,
 	.fiemap         = ext4_fiemap,
+	.sync_flags	= ext4_sync_flags,
 };
 
 const struct inode_operations ext4_special_inode_operations = {

@@ -280,6 +280,7 @@ enum {
 	Opt_no_space_cache, Opt_recovery, Opt_skip_balance,
 	Opt_check_integrity, Opt_check_integrity_including_extent_data,
 	Opt_check_integrity_print_mask, Opt_fatal_errors,
+	Opt_tag, Opt_notag, Opt_tagid,
 	Opt_err,
 };
 
@@ -306,6 +307,9 @@ static match_table_t tokens = {
 	{Opt_flushoncommit, "flushoncommit"},
 	{Opt_ratio, "metadata_ratio=%d"},
 	{Opt_discard, "discard"},
+	{Opt_tag, "tag"},
+	{Opt_notag, "notag"},
+	{Opt_tagid, "tagid=%u"},
 	{Opt_space_cache, "space_cache"},
 	{Opt_clear_cache, "clear_cache"},
 	{Opt_user_subvol_rm_allowed, "user_subvol_rm_allowed"},
@@ -487,6 +491,22 @@ int btrfs_parse_options(struct btrfs_root *root, char *options)
 		case Opt_discard:
 			btrfs_set_opt(info->mount_opt, DISCARD);
 			break;
+#ifndef CONFIG_TAGGING_NONE
+		case Opt_tag:
+			printk(KERN_INFO "btrfs: use tagging\n");
+			btrfs_set_opt(info->mount_opt, TAGGED);
+			break;
+		case Opt_notag:
+			printk(KERN_INFO "btrfs: disabled tagging\n");
+			btrfs_clear_opt(info->mount_opt, TAGGED);
+			break;
+#endif
+#ifdef CONFIG_PROPAGATE
+		case Opt_tagid:
+			/* use args[0] */
+			btrfs_set_opt(info->mount_opt, TAGGED);
+			break;
+#endif
 		case Opt_space_cache:
 			btrfs_set_opt(info->mount_opt, SPACE_CACHE);
 			break;
@@ -1188,6 +1208,12 @@ static int btrfs_remount(struct super_block *sb, int *flags, char *data)
 
 	btrfs_resize_thread_pool(fs_info,
 		fs_info->thread_pool_size, old_thread_pool_size);
+
+	if (btrfs_test_opt(root, TAGGED) && !(sb->s_flags & MS_TAGGED)) {
+		printk("btrfs: %s: tagging not permitted on remount.\n",
+			sb->s_id);
+		return -EINVAL;
+	}
 
 	if ((*flags & MS_RDONLY) == (sb->s_flags & MS_RDONLY))
 		return 0;

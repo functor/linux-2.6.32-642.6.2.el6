@@ -23,6 +23,7 @@
 #include <linux/uaccess.h>
 #include <linux/regset.h>
 #include <linux/utrace.h>
+#include <linux/vs_context.h>
 
 int __ptrace_may_access(struct task_struct *task, unsigned int mode)
 {
@@ -58,6 +59,11 @@ int __ptrace_may_access(struct task_struct *task, unsigned int mode)
 		dumpable = get_dumpable(task->mm);
 	if (dumpable != SUID_DUMP_USER && !capable(CAP_SYS_PTRACE))
 		return -EPERM;
+	if (!vx_check(task->xid, VS_WATCH_P|VS_ADMIN_P|VS_IDENT))
+		return -EPERM;
+	if (!vx_check(task->xid, VS_IDENT) &&
+		!task_vx_flags(task, VXF_STATE_ADMIN, 0))
+		return -EACCES;
 
 	return security_ptrace_access_check(task, mode);
 }

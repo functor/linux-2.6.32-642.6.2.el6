@@ -49,6 +49,7 @@
 
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/vs_inet6.h>
 #include "udp_impl.h"
 
 int ipv6_rcv_saddr_equal(const struct sock *sk, const struct sock *sk2)
@@ -63,24 +64,49 @@ int ipv6_rcv_saddr_equal(const struct sock *sk, const struct sock *sk2)
 	int addr_type2 = sk2_rcv_saddr6 ? ipv6_addr_type(sk2_rcv_saddr6) : IPV6_ADDR_MAPPED;
 
 	/* if both are mapped, treat as IPv4 */
-	if (addr_type == IPV6_ADDR_MAPPED && addr_type2 == IPV6_ADDR_MAPPED)
-		return (!sk2_ipv6only &&
+	if (addr_type == IPV6_ADDR_MAPPED && addr_type2 == IPV6_ADDR_MAPPED) {
+		if (!sk2_ipv6only &&
 			(!sk_rcv_saddr || !sk2_rcv_saddr ||
-			  sk_rcv_saddr == sk2_rcv_saddr));
+			  sk_rcv_saddr == sk2_rcv_saddr))
+			goto vs_v4;
+		else
+			return 0;
+	}
 
 	if (addr_type2 == IPV6_ADDR_ANY &&
 	    !(sk2_ipv6only && addr_type == IPV6_ADDR_MAPPED))
-		return 1;
+		goto vs;
 
 	if (addr_type == IPV6_ADDR_ANY &&
 	    !(sk_ipv6only && addr_type2 == IPV6_ADDR_MAPPED))
-		return 1;
+		goto vs;
 
 	if (sk2_rcv_saddr6 &&
 	    ipv6_addr_equal(sk_rcv_saddr6, sk2_rcv_saddr6))
-		return 1;
+		goto vs;
 
 	return 0;
+
+vs_v4:
+	if (!sk_rcv_saddr && !sk2_rcv_saddr)
+		return nx_v4_addr_conflict(sk->sk_nx_info, sk2->sk_nx_info);
+	if (!sk2_rcv_saddr)
+		return v4_addr_in_nx_info(sk->sk_nx_info, sk2_rcv_saddr, -1);
+	if (!sk_rcv_saddr)
+		return v4_addr_in_nx_info(sk2->sk_nx_info, sk_rcv_saddr, -1);
+	return 1;
+vs:
+	if (addr_type2 == IPV6_ADDR_ANY && addr_type == IPV6_ADDR_ANY)
+		return nx_v6_addr_conflict(sk->sk_nx_info, sk2->sk_nx_info);
+	else if (addr_type2 == IPV6_ADDR_ANY)
+		return v6_addr_in_nx_info(sk2->sk_nx_info, sk_rcv_saddr6, -1);
+	else if (addr_type == IPV6_ADDR_ANY) {
+		if (addr_type2 == IPV6_ADDR_MAPPED)
+			return nx_v4_addr_conflict(sk->sk_nx_info, sk2->sk_nx_info);
+		else
+			return v6_addr_in_nx_info(sk->sk_nx_info, sk2_rcv_saddr6, -1);
+	}
+	return 1;
 }
 
 int udp_v6_get_port(struct sock *sk, unsigned short snum)
@@ -111,6 +137,10 @@ static inline int compute_score(struct sock *sk, struct net *net,
 			if (!ipv6_addr_equal(&np->rcv_saddr, daddr))
 				return -1;
 			score++;
+		} else {
+			/* block non nx_info ips */
+			if (!v6_addr_in_nx_info(sk->sk_nx_info, daddr, -1))
+				return -1;
 		}
 		if (!ipv6_addr_any(&np->daddr)) {
 			if (!ipv6_addr_equal(&np->daddr, saddr))

@@ -16,14 +16,17 @@
 #include <linux/slab.h>
 #include <linux/user_namespace.h>
 #include <linux/proc_fs.h>
+#include <linux/vserver/global.h>
 
 static struct uts_namespace *create_uts_ns(void)
 {
 	struct uts_namespace *uts_ns;
 
 	uts_ns = kmalloc(sizeof(struct uts_namespace), GFP_KERNEL);
-	if (uts_ns)
+	if (uts_ns) {
 		kref_init(&uts_ns->kref);
+		atomic_inc(&vs_global_uts_ns);
+	}
 	return uts_ns;
 }
 
@@ -80,6 +83,7 @@ void free_uts_ns(struct kref *kref)
 	struct uts_namespace *ns;
 
 	ns = container_of(kref, struct uts_namespace, kref);
+	atomic_dec(&vs_global_uts_ns);
 	proc_free_inum(ns->proc_inum);
 	kfree(ns);
 }

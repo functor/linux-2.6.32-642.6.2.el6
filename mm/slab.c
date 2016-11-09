@@ -434,6 +434,8 @@ static void kmem_list3_init(struct kmem_list3 *parent)
 #define STATS_INC_FREEMISS(x)	do { } while (0)
 #endif
 
+#include "slab_vs.h"
+
 #if DEBUG
 
 /*
@@ -3357,6 +3359,7 @@ retry:
 
 	obj = slab_get_obj(cachep, slabp, nodeid);
 	check_slabp(cachep, slabp);
+	vx_slab_alloc(cachep, flags);
 	l3->free_objects--;
 	/* move slabp to correct slabp list: */
 	list_del(&slabp->list);
@@ -3433,6 +3436,7 @@ __cache_alloc_node(struct kmem_cache *cachep, gfp_t flags, int nodeid,
 	/* ___cache_alloc_node can fall back to other nodes */
 	ptr = ____cache_alloc_node(cachep, flags, nodeid);
   out:
+	vx_slab_alloc(cachep, flags);
 	local_irq_restore(save_flags);
 	ptr = cache_alloc_debugcheck_after(cachep, flags, ptr, caller);
 	kmemleak_alloc_recursive(ptr, obj_size(cachep), 1, cachep->flags,
@@ -3620,6 +3624,7 @@ static inline void __cache_free(struct kmem_cache *cachep, void *objp)
 	check_irq_off();
 	kmemleak_free_recursive(objp, cachep->flags);
 	objp = cache_free_debugcheck(cachep, objp, __builtin_return_address(0));
+	vx_slab_free(cachep);
 
 	kmemcheck_slab_free(cachep, objp, obj_size(cachep));
 

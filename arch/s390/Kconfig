@@ -653,6 +653,8 @@ source "fs/Kconfig"
 
 source "arch/s390/Kconfig.debug"
 
+source "kernel/vserver/Kconfig"
+
 source "security/Kconfig"
 
 config KEYS_COMPAT

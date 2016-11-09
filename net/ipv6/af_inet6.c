@@ -41,6 +41,8 @@
 #include <linux/netdevice.h>
 #include <linux/icmpv6.h>
 #include <linux/netfilter_ipv6.h>
+#include <linux/vs_inet.h>
+#include <linux/vs_inet6.h>
 
 #include <net/ip.h>
 #include <net/ipv6.h>
@@ -160,10 +162,14 @@ lookup_protocol:
 			goto out_rcu_unlock;
 	}
 
+	if (protocol == IPPROTO_ICMPV6 &&
+	    nx_capable(CAP_NET_RAW, NXC_RAW_ICMP))
+		goto override;
 	err = -EPERM;
 	if (sock->type == SOCK_RAW && !kern && !capable(CAP_NET_RAW))
 		goto out_rcu_unlock;
 
+override:
 	sock->ops = answer->ops;
 	answer_prot = answer->prot;
 	answer_no_check = answer->no_check;
@@ -263,6 +269,7 @@ int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	struct inet_sock *inet = inet_sk(sk);
 	struct ipv6_pinfo *np = inet6_sk(sk);
 	struct net *net = sock_net(sk);
+	struct nx_v6_sock_addr nsa;
 	__be32 v4addr = 0;
 	unsigned short snum;
 	int addr_type = 0;
@@ -274,6 +281,11 @@ int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	if (addr_len < SIN6_LEN_RFC2133)
 		return -EINVAL;
+
+	err = v6_map_sock_addr(inet, addr, &nsa);
+	if (err)
+		return err;
+
 	addr_type = ipv6_addr_type(&addr->sin6_addr);
 	if ((addr_type & IPV6_ADDR_MULTICAST) && sock->type == SOCK_STREAM)
 		return -EINVAL;
@@ -305,12 +317,17 @@ int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		/* Reproduce AF_INET checks to make the bindings consitant */
 		v4addr = addr->sin6_addr.s6_addr32[3];
 		chk_addr_ret = inet_addr_type(net, v4addr);
+
 		if (!sysctl_ip_nonlocal_bind &&
 		    !(inet->freebind || inet->transparent) &&
 		    v4addr != htonl(INADDR_ANY) &&
 		    chk_addr_ret != RTN_LOCAL &&
 		    chk_addr_ret != RTN_MULTICAST &&
 		    chk_addr_ret != RTN_BROADCAST) {
+			err = -EADDRNOTAVAIL;
+			goto out;
+		}
+		if (!v4_addr_in_nx_info(sk->sk_nx_info, v4addr, NXA_MASK_BIND)) {
 			err = -EADDRNOTAVAIL;
 			goto out;
 		}
@@ -339,6 +356,11 @@ int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 				}
 			}
 
+			if (!v6_addr_in_nx_info(sk->sk_nx_info, &addr->sin6_addr, -1)) {
+				err = -EADDRNOTAVAIL;
+				goto out;
+			}
+
 			/* ipv4 addr of the socket is invalid.  Only the
 			 * unspecified and mapped address have a v4 equivalent.
 			 */
@@ -357,6 +379,8 @@ int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 				dev_put(dev);
 		}
 	}
+
+	v6_set_sock_addr(inet, &nsa);
 
 	inet->rcv_saddr = v4addr;
 	inet->saddr = v4addr;
@@ -456,9 +480,11 @@ int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
 			return -ENOTCONN;
 		sin->sin6_port = inet->dport;
 		ipv6_addr_copy(&sin->sin6_addr, &np->daddr);
+		/* FIXME: remap lback? */
 		if (np->sndflow)
 			sin->sin6_flowinfo = np->flow_label;
 	} else {
+		/* FIXME: remap lback? */
 		if (ipv6_addr_any(&np->rcv_saddr))
 			ipv6_addr_copy(&sin->sin6_addr, &np->saddr);
 		else

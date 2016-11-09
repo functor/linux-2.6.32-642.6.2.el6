@@ -33,6 +33,8 @@
 #include <linux/namei.h>
 #include <linux/mount.h>
 #include <linux/sched.h>
+#include <linux/vs_tag.h>
+#include <linux/vmalloc.h>
 #include <linux/kmemleak.h>
 
 #include "delegation.h"
@@ -1422,6 +1424,7 @@ static struct dentry *nfs_lookup(struct inode *dir, struct dentry * dentry, stru
 	if (IS_ERR(res))
 		goto out_unblock_sillyrename;
 
+	dx_propagate_tag(nd, inode);
 	/* Success: notify readdir to use READDIRPLUS */
 	nfs_advise_use_readdirplus(dir);
 

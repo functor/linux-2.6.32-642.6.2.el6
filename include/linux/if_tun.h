@@ -50,6 +50,7 @@
 #define TUNSETSNDBUF   _IOW('T', 212, int)
 #define TUNGETVNETHDRSZ _IOR('T', 215, int)
 #define TUNSETVNETHDRSZ _IOW('T', 216, int)
+#define TUNSETNID     _IOW('T', 250, int)
 
 /* TUNSETIFF ifr flags */
 #define IFF_TUN		0x0001

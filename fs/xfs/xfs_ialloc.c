@@ -37,7 +37,6 @@
 #include "xfs_error.h"
 #include "xfs_bmap.h"
 
-
 /*
  * Allocation group level functions.
  */

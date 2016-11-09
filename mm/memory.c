@@ -56,6 +56,7 @@
 #include <linux/kallsyms.h>
 #include <linux/swapops.h>
 #include <linux/elf.h>
+// #include <linux/vs_memory.h>
 
 #include <asm/io.h>
 #include <asm/pgalloc.h>
@@ -649,6 +650,9 @@ int copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	int progress = 0;
 	int rss[3];
 	swp_entry_t entry = (swp_entry_t){0};
+
+	if (!vx_rss_avail(dst_mm, ((end - addr)/PAGE_SIZE + 1)))
+		return -ENOMEM;
 
 again:
 	rss[2] = rss[1] = rss[0] = 0;
@@ -2913,6 +2917,9 @@ static int do_anonymous_page(struct mm_struct *mm, struct vm_area_struct *vma,
 
 	pte_unmap(page_table);
 
+	if (!vx_rss_avail(mm, 1))
+		goto oom;
+
 	/* Check if we need to add a guard page to the stack */
 	if (check_stack_guard_page(vma, address) < 0)
 		return VM_FAULT_SIGBUS;
@@ -3229,6 +3236,7 @@ int handle_pte_fault(struct mm_struct *mm,
 {
 	pte_t entry;
 	spinlock_t *ptl;
+	int ret = 0, type = VXPT_UNKNOWN;
 
 	entry = *pte;
 	if (!pte_present(entry)) {
@@ -3253,9 +3261,12 @@ int handle_pte_fault(struct mm_struct *mm,
 	if (unlikely(!pte_same(*pte, entry)))
 		goto unlock;
 	if (flags & FAULT_FLAG_WRITE) {
-		if (!pte_write(entry))
-			return do_wp_page(mm, vma, address,
+		if (!pte_write(entry)) {
+			ret = do_wp_page(mm, vma, address,
 					pte, pmd, ptl, entry);
+			type = VXPT_WRITE;
+			goto out;
+		}
 		entry = pte_mkdirty(entry);
 	}
 	entry = pte_mkyoung(entry);
@@ -3273,7 +3284,10 @@ int handle_pte_fault(struct mm_struct *mm,
 	}
 unlock:
 	pte_unmap_unlock(pte, ptl);
-	return 0;
+	ret = 0;
+out:
+	vx_page_fault(mm, vma, type, ret);
+	return ret;
 }
 
 /*
