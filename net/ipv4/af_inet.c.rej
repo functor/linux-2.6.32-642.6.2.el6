@@ -1,0 +1,12 @@
+--- net/ipv4/af_inet.c
++++ net/ipv4/af_inet.c
+@@ -332,6 +332,9 @@
+ 	if ((protocol == IPPROTO_ICMP) &&
+ 	        nx_capable(CAP_NET_RAW, NXC_RAW_ICMP))
+ 		goto override;
++	if (sock->type == SOCK_RAW &&
++		nx_capable(CAP_NET_RAW, NXC_RAW_SOCKET))
++		goto override;
+ 	if (sock->type == SOCK_RAW && !kern && !capable(CAP_NET_RAW))
+ 		goto out_rcu_unlock;
+ 
