@@ -215,6 +215,7 @@ mark_tg(struct sk_buff *skb, const struct xt_target_param *par)
 			if (!connection_sk) {
 				connection_sk = inet_lookup_listener(net,
 								     &tcp_hashinfo,
+								     src_ip, src_port,
 								     ip, port,
 								     dif);
 				sockettype = 1;	/* Listening socket */
