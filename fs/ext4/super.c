@@ -1251,6 +1251,7 @@ static const match_table_t tokens = {
 	{Opt_init_itable, "init_itable"},
 	{Opt_noinit_itable, "noinit_itable"},
 	{Opt_tag, "tag"},
+	{Opt_tag, "tagxid"},
 	{Opt_notag, "notag"},
 	{Opt_tagid, "tagid=%u"},
 	{Opt_err, NULL},
