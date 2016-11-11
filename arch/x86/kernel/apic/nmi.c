@@ -52,7 +52,7 @@ EXPORT_SYMBOL(nmi_active);
 #ifdef CONFIG_X86_64
 unsigned int nmi_watchdog = NMI_DEFAULT;
 #else
-unsigned int nmi_watchdog = NMI_NONE;
+unsigned int nmi_watchdog = NMI_IO_APIC;
 #endif
 EXPORT_SYMBOL(nmi_watchdog);
 
