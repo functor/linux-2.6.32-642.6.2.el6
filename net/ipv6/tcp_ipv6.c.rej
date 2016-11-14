@@ -1,0 +1,10 @@
+--- net/ipv6/tcp_ipv6.c	2011-11-16 16:51:07.402470961 -0500
++++ net/ipv6/tcp_ipv6.c	2011-11-16 17:06:57.467410360 -0500
+@@ -1695,6 +1707,7 @@
+ 	skb->dev = NULL;
+ 
+ 	bh_lock_sock_nested(sk);
++	WEB100_UPDATE_FUNC(tcp_sk(sk), web100_update_segrecv(tcp_sk(sk), skb));
+ 	ret = 0;
+ 	if (!sock_owned_by_user(sk)) {
+ #ifdef CONFIG_NET_DMA

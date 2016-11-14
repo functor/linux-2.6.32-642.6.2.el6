@@ -1,0 +1,39 @@
+--- net/ipv4/tcp_input.c	2011-11-16 16:51:07.412471138 -0500
++++ net/ipv4/tcp_input.c	2011-11-16 16:51:06.107470833 -0500
+@@ -2699,6 +2721,7 @@
+ 	}
+ 	tcp_moderate_cwnd(tp);
+ 	tp->snd_cwnd_stamp = tcp_time_stamp;
++	WEB100_VAR_INC(tp, CongestionOverCount);	/* XXX This is wrong. -JWH */
+ }
+ 
+ static inline int tcp_may_undo(struct tcp_sock *tp)
+@@ -3106,6 +3131,7 @@
+ 	tcp_rtt_estimator(sk, seq_rtt);
+ 	tcp_set_rto(sk);
+ 	inet_csk(sk)->icsk_backoff = 0;
++	WEB100_UPDATE_FUNC(tcp_sk(sk), web100_update_rtt(sk, seq_rtt));
+ }
+ 
+ /* Read draft-ietf-tcplw-high-performance before mucking
+@@ -3473,10 +3520,12 @@
+ 				tp->max_window = nwin;
+ 				tcp_sync_mss(sk, inet_csk(sk)->icsk_pmtu_cookie);
+ 			}
++			WEB100_UPDATE_FUNC(tp, web100_update_rwin_rcvd(tp));
+ 		}
+ 	}
+ 
+ 	tp->snd_una = ack;
++	WEB100_UPDATE_FUNC(tp, web100_update_snd_una(tp));
+ 
+ 	return flag;
+ }
+@@ -3668,6 +3717,7 @@
+ 		 */
+ 		tcp_update_wl(tp, ack_seq);
+ 		tp->snd_una = ack;
++		WEB100_UPDATE_FUNC(tp, web100_update_snd_una(tp));
+ 		flag |= FLAG_WIN_UPDATE;
+ 
+ 		tcp_ca_event(sk, CA_EVENT_FAST_ACK);

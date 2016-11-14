@@ -1,0 +1,10 @@
+--- include/linux/netlink.h	2011-11-16 16:51:07.258471024 -0500
++++ include/linux/netlink.h	2011-11-16 16:51:05.954471154 -0500
+@@ -24,6 +24,7 @@
+ /* leave room for NETLINK_DM (DM Events) */
+ #define NETLINK_SCSITRANSPORT	18	/* SCSI Transports */
+ #define NETLINK_ECRYPTFS	19
++#define NETLINK_WEB100		29
+ 
+ #define MAX_LINKS 32		
+ 

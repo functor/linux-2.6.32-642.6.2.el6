@@ -1,0 +1,12 @@
+--- net/ipv4/tcp_cong.c	2011-11-16 16:51:07.414470925 -0500
++++ net/ipv4/tcp_cong.c	2011-11-16 16:51:06.109471129 -0500
+@@ -316,7 +316,8 @@
+ 		return;
+ 
+ 	if (sysctl_tcp_max_ssthresh > 0 && tp->snd_cwnd > sysctl_tcp_max_ssthresh)
+-		cnt = sysctl_tcp_max_ssthresh >> 1;	/* limited slow start */
++		/* limited slow start */
++		cnt = NET100_WAD(tp, WAD_MaxSsthresh, sysctl_tcp_max_ssthresh) >> 1;
+ 	else
+ 		cnt = tp->snd_cwnd;			/* exponential increase */
+ 

@@ -1,0 +1,13 @@
+--- net/ipv4/tcp.c	2011-11-16 16:51:07.413470925 -0500
++++ net/ipv4/tcp.c	2011-11-16 16:51:06.108471039 -0500
+@@ -3021,6 +3046,10 @@
+ 	       tcp_hashinfo.ehash_size, tcp_hashinfo.bhash_size);
+ 
+ 	tcp_register_congestion_control(&tcp_reno);
++	
++#ifdef CONFIG_WEB100_STATS
++	web100_stats_init();
++#endif
+ }
+ 
+ EXPORT_SYMBOL(tcp_close);

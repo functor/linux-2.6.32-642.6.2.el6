@@ -372,10 +372,8 @@ void tcp_reno_cong_avoid(struct sock *sk, u32 ack, u32 in_flight)
 		return;
 
 	/* In "safe" area, increase. */
-        if (tp->snd_cwnd <= tp->snd_ssthresh) {
+	if (tp->snd_cwnd <= tp->snd_ssthresh)
 		tcp_slow_start(tp);
-		WEB100_VAR_INC(tp, SlowStart);
-	}
 
 	/* In dangerous area, increase slowly. */
 	else if (sysctl_tcp_abc) {
@@ -387,10 +385,8 @@ void tcp_reno_cong_avoid(struct sock *sk, u32 ack, u32 in_flight)
 			if (tp->snd_cwnd < tp->snd_cwnd_clamp)
 				tp->snd_cwnd++;
 		}
-		WEB100_VAR_INC(tp, CongAvoid);
 	} else {
 		tcp_cong_avoid_ai(tp, tp->snd_cwnd);
-		WEB100_VAR_INC(tp, CongAvoid);
 	}
 }
 EXPORT_SYMBOL_GPL(tcp_reno_cong_avoid);

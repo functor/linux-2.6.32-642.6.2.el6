@@ -109,10 +109,6 @@ struct vmcore {
 
 extern void proc_root_init(void);
 
-#ifdef CONFIG_WEB100_STATS
-extern void proc_web100_init(void);
-#endif
-
 void proc_flush_task(struct task_struct *task);
 
 extern struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,

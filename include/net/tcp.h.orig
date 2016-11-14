@@ -45,8 +45,6 @@
 
 #include <linux/seq_file.h>
 
-#include <net/web100.h>
-
 extern struct inet_hashinfo tcp_hashinfo;
 
 extern struct percpu_counter tcp_orphan_count;
@@ -898,10 +896,6 @@ extern __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst);
  */
 static __inline__ __u32 tcp_max_burst(const struct tcp_sock *tp)
 {
-#ifdef CONFIG_WEB100_NET100
-	return max_t(int, tp->reordering,
-		     NET100_WAD(tp, WAD_MaxBurst, sysctl_WAD_MaxBurst));
-#endif
 	return tp->reordering;
 }
 
