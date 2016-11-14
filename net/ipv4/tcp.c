@@ -3082,6 +3082,9 @@ void __init tcp_init(void)
 
 	tcp_register_congestion_control(&tcp_reno);
 	tcp_tasklet_init();
+#ifdef CONFIG_WEB100_STATS
+	web100_stats_init();
+#endif
 }
 
 EXPORT_SYMBOL(tcp_close);
