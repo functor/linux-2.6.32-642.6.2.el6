@@ -259,6 +259,14 @@ extern int sysctl_tcp_thin_dupack;
 extern int sysctl_tcp_limit_output_bytes;
 extern int sysctl_tcp_challenge_ack_limit;
 extern int sysctl_tcp_min_tso_segs;
+#ifdef CONFIG_WEB100_NET100
+extern int sysctl_WAD_IFQ;
+extern int sysctl_WAD_MaxBurst;
+#endif
+#ifdef CONFIG_WEB100_STATS
+extern int sysctl_web100_fperms;
+extern int sysctl_web100_gid;
+#endif
 
 extern atomic_t tcp_memory_allocated;
 extern struct percpu_counter tcp_sockets_allocated;
