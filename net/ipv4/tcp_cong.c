@@ -324,7 +324,8 @@ void tcp_slow_start(struct tcp_sock *tp)
 		return;
 
 	if (sysctl_tcp_max_ssthresh > 0 && tp->snd_cwnd > sysctl_tcp_max_ssthresh)
-		cnt = sysctl_tcp_max_ssthresh >> 1;	/* limited slow start */
+		/* limited slow start */
+		cnt = NET100_WAD(tp, WAD_MaxSsthresh, sysctl_tcp_max_ssthresh) >> 1;
 	else
 		cnt = snd_cwnd;				/* exponential increase */
 
