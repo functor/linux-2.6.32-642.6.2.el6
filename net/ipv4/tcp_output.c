@@ -883,11 +883,33 @@ static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 		TCP_INC_STATS(sock_net(sk), TCP_MIB_OUTSEGS);
 
 	tp->segs_out += tcp_skb_pcount(skb);
+#ifdef CONFIG_WEB100_STATS
+	{
+		/* If the skb isn't cloned, we can't reference it after
+		 * calling queue_xmit, so copy everything we need here. */
+		int len = skb->len;
+		int pcount = tcp_skb_pcount(skb);
+		__u32 seq = TCP_SKB_CB(skb)->seq;
+		__u32 end_seq = TCP_SKB_CB(skb)->end_seq;
+		int flags = TCP_SKB_CB(skb)->flags;
+
+		err = icsk->icsk_af_ops->queue_xmit(skb, 0);
+		if (likely(err == 0))
+			WEB100_UPDATE_FUNC(tp, web100_update_segsend(sk, len, pcount,
+						seq, end_seq, flags));
+	}
+#else
 	err = icsk->icsk_af_ops->queue_xmit(skb, 0);
+#endif
 	if (likely(err <= 0))
 		return err;
 
+#ifdef CONFIG_WEB100_NET100
+	if (!NET100_WAD(tp, WAD_IFQ, sysctl_WAD_IFQ))
+#endif
 	tcp_enter_cwr(sk, 1);
+	WEB100_VAR_INC(tp, SendStall);
+
 
 	return net_xmit_eval(err);
 }
@@ -1827,6 +1849,11 @@ static int tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		if (push_one)
 			break;
 	}
+
+	if (why == WC_SNDLIM_NONE)
+		why = WC_SNDLIM_SENDER;
+	WEB100_UPDATE_FUNC(tp, web100_update_sndlim(tp, why));
+
 	if (inet_csk(sk)->icsk_ca_state == TCP_CA_Recovery)
 		tp->prr_out += sent_pkts;
 
