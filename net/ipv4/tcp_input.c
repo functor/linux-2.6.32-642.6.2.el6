@@ -2766,6 +2766,7 @@ static void tcp_undo_cwr(struct sock *sk, const bool undo_ssthresh)
 		tp->snd_cwnd = max(tp->snd_cwnd, tp->snd_ssthresh);
 	}
 	tp->snd_cwnd_stamp = tcp_time_stamp;
+	WEB100_VAR_INC(tp, CongestionOverCount);        /* XXX This is wrong. -JWH */
 }
 
 static inline int tcp_may_undo(struct tcp_sock *tp)
@@ -3209,6 +3210,7 @@ void tcp_valid_rtt_meas(struct sock *sk, u32 seq_rtt)
 	tcp_rtt_estimator(sk, seq_rtt);
 	tcp_set_rto(sk);
 	inet_csk(sk)->icsk_backoff = 0;
+	WEB100_UPDATE_FUNC(tcp_sk(sk), web100_update_rtt(sk, seq_rtt));
 }
 EXPORT_SYMBOL(tcp_valid_rtt_meas);
 
@@ -3599,10 +3601,12 @@ static int tcp_ack_update_window(struct sock *sk, struct sk_buff *skb, u32 ack,
 				tp->max_window = nwin;
 				tcp_sync_mss(sk, inet_csk(sk)->icsk_pmtu_cookie);
 			}
+			WEB100_UPDATE_FUNC(tp, web100_update_rwin_rcvd(tp));
 		}
 	}
 
 	tcp_snd_una_update(tp, ack);
+	WEB100_UPDATE_FUNC(tp, web100_update_snd_una(tp));
 
 	return flag;
 }
@@ -3866,6 +3870,7 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 		 */
 		tcp_update_wl(tp, ack_seq);
 		tcp_snd_una_update(tp, ack);
+		WEB100_UPDATE_FUNC(tp, web100_update_snd_una(tp));
 		flag |= FLAG_WIN_UPDATE;
 
 		tcp_ca_event(sk, CA_EVENT_FAST_ACK);
