@@ -451,6 +451,10 @@ struct tcp_sock {
 				 * The total number of segments sent.
 				 */
 #endif
+
+#ifdef CONFIG_WEB100_STATS
+        struct web100stats      *tcp_stats;
+#endif
 };
 
 enum tsq_flags {
