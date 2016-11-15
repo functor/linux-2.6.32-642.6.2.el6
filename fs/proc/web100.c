@@ -345,41 +345,6 @@ static struct file_operations connection_file_fops = {
 };
 
 
-static size_t v6addr_str(char *dest, short *addr)
-{
-	int start = -1, end = -1;
-	int i, j;
-	int pos;
-
-	/* Find longest subsequence of 0's in addr */
-	for (i = 0; i < 8; i++) {
-		if (addr[i] == 0) {
-			for (j = i + 1; addr[j] == 0 && j < 8; j++);
-			if (j - i > end - start) {
-				end = j;
-				start = i;
-			}
-			i = j;
-		}
-	}
-	if (end - start == 1)
-		start = -1;
-
-	pos = 0;
-	for (i = 0; i < 8; i++) {
-		if (i > 0)
-			pos += sprintf(dest + pos, ":");
-		if (i == start) {
-			pos += sprintf(dest + pos, ":");
-			i += end - start - 1;
-		} else {
-			pos += sprintf(dest + pos, "%hx", ntohs(addr[i]));
-		}
-	}
-
-	return pos;
-}
-
 /**  /proc/web100/<connection>/spec_ascii  **/
 static ssize_t connection_spec_ascii_read(struct file * file, char * buf,
 	size_t nbytes, loff_t *ppos)
