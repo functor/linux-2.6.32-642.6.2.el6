@@ -891,7 +891,7 @@ static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 		int pcount = tcp_skb_pcount(skb);
 		__u32 seq = TCP_SKB_CB(skb)->seq;
 		__u32 end_seq = TCP_SKB_CB(skb)->end_seq;
-		int flags = TCP_SKB_CB(skb)->flags;
+		int flags = TCP_SKB_CB(skb)->tcp_flags;
 
 		err = icsk->icsk_af_ops->queue_xmit(skb, 0);
 		if (likely(err == 0))
