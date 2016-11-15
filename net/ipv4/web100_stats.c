@@ -605,7 +605,7 @@ void web100_update_segsend(struct sock *sk, int len, int pcount,
 	}
 	
 	/* Check for retransmission. */
-	if (flags & TCPCB_FLAG_SYN) {
+	if (flags & TCPHDR_SYN) {
 		if (inet_csk(sk)->icsk_retransmits)
 			stats->wc_vars.PktsRetrans++;
 	} else if (before(seq, stats->wc_vars.SndMax)) {
