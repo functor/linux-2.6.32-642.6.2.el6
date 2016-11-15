@@ -46,7 +46,9 @@ extern struct web100stats *web100stats_first;
 extern rwlock_t web100_linkage_lock;
 
 /* For /proc/web100 */
-extern struct web100stats *web100stats_lookup(int cid);
+extern int vx_can_read_stats(struct web100stats *stats);
+extern struct web100stats *vx_web100stats_lookup(int cid, int vx_filter);
+#define web100stats_lookup(cid) vx_web100stats_lookup(cid, 1)
 
 /* For the TCP code */
 extern int  web100_stats_create(struct sock *sk);

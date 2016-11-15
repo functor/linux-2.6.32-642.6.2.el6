@@ -1321,7 +1321,9 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 		sk_free(newsk);
 		goto out;
 	}
-	tcp_sk(newsk)->tcp_stats->wc_vars.LocalAddressType = WC_ADDRTYPE_IPV6;
+	if ( tcp_sk(newsk)->tcp_stats != NULL ) {
+		tcp_sk(newsk)->tcp_stats->wc_vars.LocalAddressType = WC_ADDRTYPE_IPV6;
+	}
 #endif
 
 	/*
@@ -1866,7 +1868,9 @@ static int tcp_v6_init_sock(struct sock *sk)
 		if ((err = web100_stats_create(sk))) {
 			return err;
 		}
-		tcp_sk(sk)->tcp_stats->wc_vars.LocalAddressType = WC_ADDRTYPE_IPV6;
+		if ( tcp_sk(sk)->tcp_stats != NULL ) {
+			tcp_sk(sk)->tcp_stats->wc_vars.LocalAddressType = WC_ADDRTYPE_IPV6;
+		}
 	}
 #endif
 	

@@ -266,6 +266,7 @@ extern int sysctl_WAD_MaxBurst;
 #ifdef CONFIG_WEB100_STATS
 extern int sysctl_web100_fperms;
 extern int sysctl_web100_gid;
+extern int sysctl_web100_sidestream_xid;
 #endif
 
 extern atomic_t tcp_memory_allocated;

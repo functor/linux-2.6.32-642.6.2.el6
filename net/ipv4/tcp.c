@@ -300,6 +300,7 @@ EXPORT_SYMBOL(sysctl_WAD_MaxBurst);
 #ifdef CONFIG_WEB100_STATS
 int sysctl_web100_fperms = CONFIG_WEB100_FPERMS;
 int sysctl_web100_gid = CONFIG_WEB100_GID;
+int sysctl_web100_sidestream_xid = -1;
 #endif
 
 atomic_t tcp_memory_allocated;	/* Current allocated memory. */
@@ -881,7 +882,7 @@ wait_for_memory:
 		if (copied) {
 			tcp_push(sk, flags & ~MSG_MORE, mss_now, TCP_NAGLE_PUSH);
 #ifdef CONFIG_WEB100_STATS
-			web100_update_writeq(sk);
+			WEB100_UPDATE_FUNC(tcp_sk(sk), web100_update_writeq(sk));
 #endif
 		}
 
@@ -1134,7 +1135,7 @@ wait_for_memory:
 			if (copied) {
 				tcp_push(sk, flags & ~MSG_MORE, mss_now, TCP_NAGLE_PUSH);
 #ifdef CONFIG_WEB100_STATS
-				web100_update_writeq(sk);
+				WEB100_UPDATE_FUNC(tcp_sk(sk), web100_update_writeq(sk));
 #endif
 			}
 
@@ -1516,7 +1517,7 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 					tp->rcv_nxt, flags);
 		}
 #ifdef CONFIG_WEB100_STATS
-		web100_update_recvq(sk);
+		WEB100_UPDATE_FUNC(tcp_sk(sk), web100_update_recvq(sk));
 #endif
 
 		/* Well, if we have backlog, try to process it now yet. */

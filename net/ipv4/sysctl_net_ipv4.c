@@ -824,6 +824,14 @@ static struct ctl_table ipv4_table[] = {
 		.mode		= 0644,
 		.proc_handler	= &web100_proc_dointvec_update,
 	},
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "web100_sidestream_xid",
+		.data		= &sysctl_web100_sidestream_xid,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &web100_proc_dointvec_update,
+	},
 #endif
 	{
 		.ctl_name	= CTL_UNNUMBERED,

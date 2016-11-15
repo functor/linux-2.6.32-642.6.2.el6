@@ -427,10 +427,10 @@ static ssize_t connection_spec_ascii_read(struct file * file, char * buf,
 		local_port = vars->LocalPort;
 		remote_port = vars->RemPort;
 		
-		len += v6addr_str(tmpbuf + len, (short *)&vars->LocalAddress.v6addr.addr);
-		len += sprintf(tmpbuf + len, ".%d ", local_port);
-		len += v6addr_str(tmpbuf + len, (short *)&vars->RemAddress.v6addr.addr);
-		len += sprintf(tmpbuf + len, ".%d\n", remote_port);
+		len += snprintf(tmpbuf + len, sizeof(tmpbuf) - len, "%pI6", &vars->LocalAddress.v6addr.addr);
+		len += snprintf(tmpbuf + len, sizeof(tmpbuf) - len, ".%d ", local_port);
+		len += snprintf(tmpbuf + len, sizeof(tmpbuf) - len, "%pI6", &vars->RemAddress.v6addr.addr);
+		len += snprintf(tmpbuf + len, sizeof(tmpbuf) - len, ".%d\n", remote_port);
 	} else {
 		printk(KERN_ERR "connection_spec_ascii_read: LocalAddressType invalid\n");
 		return 0;
@@ -655,7 +655,8 @@ static int get_connection_list(int pos, int *cids, int max)
 	
 	stats = web100stats_first;
 	while (stats && n < max) {
-		if (!stats->wc_dead) {
+		// only return readable stats
+		if ( 1 == vx_can_read_stats(stats) ) {
 			if (pos <= 0)
 				cids[n++] = stats->wc_cid;
 			else

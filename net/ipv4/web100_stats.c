@@ -72,7 +72,99 @@ static inline int web100stats_hash(int cid)
 	return cid % web100stats_htsize;
 }
 
-struct web100stats *web100stats_lookup(int cid)
+/*
+ * Determine if the given socket should have web100 stats structure.
+ *
+ * Args:
+ * 		sk -- socket pointer
+ * Returns:
+ * 		0 -- false, do not create the web100 stats struct
+ * 		1 -- true, create the web100 stats structure
+ */
+int vx_can_create_stats(struct sock *sk) {
+	struct vx_info *vxi=NULL;
+
+	if ( NULL == sk ) { 
+		return 0; 
+	}
+
+	if ( 0 != sk->sk_xid ) {
+		vxi = lookup_vx_info(sk->sk_xid);
+		if ( NULL != vxi && !vx_info_ccaps(vxi, VXC_ENABLE_WEB100) ) {
+			/* do not create stats struct */
+			return 0;
+		} 
+	}
+	/* create stats struct */
+	return 1;
+}
+
+/* 
+ * Determine if the current task has permission to read given stats struct. The 
+ * reader's identity is taken as the current task.  If the current task 
+ * has permission, then the function returns TRUE. Otherwise, FALSE.
+ * 
+ * At least one condition must be satisfied for the function to return TRUE:
+ *      xid == 0  -- reader is the root context of the system.
+ *      xid == stats->wc_sk->sk_xid -- reader created the stats object 
+ *      xid == web100_sidestream_xid -- reader can see all stats
+ *
+ * Args:
+ *      stats - the web100 stats structure to read.
+ *
+ * Returns:
+ *      0 - FALSE, read permission should be denied.
+ *      1 - TRUE, current task has read permission
+ */
+int vx_can_read_stats(struct web100stats *stats) {
+	struct vx_info *vxi=NULL;
+	struct sock *sk = NULL;
+
+	if ( NULL == stats || stats->wc_dead ) {
+		return 0; 
+	}
+
+	if ( 0 == vx_current_xid() ) {
+		// always ok for xid=0 (root context)
+		return 1;
+	}
+
+	vxi = current_vx_info(); 
+	if ( NULL == vxi ) {
+		/* non-root context is missing vx_info; cannot check access flags */
+		return 0;
+	}
+
+	if ( vx_current_xid() == sysctl_web100_sidestream_xid ) { 
+		/* the sidestream xid can view all stats. */
+		return 1;
+	}
+
+	sk = stats->wc_sk;
+	if ( vx_current_xid() == sk->sk_xid ) {
+		/* the xid is the socket owner so can see it's own connections */
+		return 1;
+	}
+
+	/* all checks have failed, so deny read permission. */
+	return 0;
+}
+
+/*
+ * Based on the connection ID, return the web100stats structure.
+ * Optionally, when vx_filter=1, filter the result by the 
+ * read-permission of the current task. When vx_filter=0, do not perform
+ * filtering.
+ *
+ * Args:
+ *  cid       -- connection id
+ *  vx_filter -- 1 or 0, filter the returned stats or not
+ *
+ * Returns:
+ *  If the cid is found, a pointer to a web100stats struct;
+ *  If the cid is not found or filtered, NULL is returned.
+ */
+struct web100stats *vx_web100stats_lookup(int cid, int vx_filter)
 {
 	struct web100stats *stats;
 	
@@ -83,7 +175,10 @@ struct web100stats *web100stats_lookup(int cid)
 	stats = web100stats_ht[web100stats_hash(cid)];
 	while (stats && stats->wc_cid != cid)
 		stats = stats->wc_hash_next;
-	return stats;
+	if ( 0 == vx_filter || 1 == vx_can_read_stats(stats) ) {
+		return stats;
+	} 
+	return NULL;
 }
 
 /* This will get really slow as the cid space fills.  This can be done
@@ -99,7 +194,8 @@ static int get_next_cid(void)
 	
 	i = web100stats_next_cid;
 	do {
-		if (web100stats_lookup(i) == NULL)
+		/* use vx sensitive version *without* filtering */
+		if (vx_web100stats_lookup(i,0) == NULL)
 			break;
 		i = (i + 1) % WEB100_MAX_CONNS;
 	} while (i != web100stats_next_cid);
@@ -252,6 +348,12 @@ int web100_stats_create(struct sock *sk)
 	struct web100directs *vars;
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct timeval tv;
+
+	if ( 0 == vx_can_create_stats(sk) ) {
+		/* do not create web100 stats for this socket */
+		tp->tcp_stats = NULL;
+		return 0;
+	}
 	
 	if ((stats = kmalloc(sizeof (struct web100stats), gfp_any())) == NULL)
 		return -ENOMEM;
@@ -294,6 +396,9 @@ int web100_stats_create(struct sock *sk)
 
 void web100_stats_destroy(struct web100stats *stats)
 {
+	if ( NULL == stats ) {
+		return;
+	}
 	/* Attribute final sndlim time. */
 	web100_update_sndlim(tcp_sk(stats->wc_sk), stats->wc_limstate);
 	

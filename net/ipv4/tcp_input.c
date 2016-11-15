@@ -3281,7 +3281,7 @@ static void tcp_cong_avoid(struct sock *sk, u32 ack, u32 in_flight)
 	}
 	
 #ifdef CONFIG_WEB100_NET100
-	if (vars->WAD_NoAI) {
+	if (stats != NULL && vars->WAD_NoAI) {
 		tp->snd_cwnd += vars->WAD_CwndAdjust;
 		vars->WAD_CwndAdjust = 0;
 		tp->snd_cwnd_stamp = tcp_time_stamp;
@@ -4619,7 +4619,7 @@ queue_and_out:
 		tcp_fast_path_check(sk);
 
 #ifdef CONFIG_WEB100_STATS
-		web100_update_recvq(sk);
+		WEB100_UPDATE_FUNC(tcp_sk(sk), web100_update_recvq(sk));
 #endif
 
 		if (eaten > 0)
@@ -4680,7 +4680,7 @@ drop:
 		   tp->rcv_nxt, TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq);
 
 #ifdef CONFIG_WEB100_STATS
-	web100_update_recvq(sk);
+	WEB100_UPDATE_FUNC(tcp_sk(sk), web100_update_recvq(sk));
 #endif
 	skb_set_owner_r(skb, sk);
 
@@ -5566,7 +5566,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			}
 
 #ifdef CONFIG_WEB100_STATS
-			web100_update_recvq(sk);
+			WEB100_UPDATE_FUNC(tcp_sk(sk), web100_update_recvq(sk));
 #endif
 			tcp_event_data_recv(sk, skb);
 
