@@ -700,12 +700,19 @@ static int web100_dir_readdir(struct file *filp,
 static inline struct dentry *web100_dir_dent(void)
 {
 	struct qstr qstr;
+	struct pid_namespace *ns;
+
+	if ((ns = task_active_pid_ns(current)) == NULL)
+		return NULL;
+
+	if (ns->proc_mnt == NULL)
+		return NULL;
 	
 	qstr.name = "web100";
 	qstr.len = 6;
 	qstr.hash = full_name_hash(qstr.name, qstr.len);
-	
-	return d_lookup(proc_mnt->mnt_sb->s_root, &qstr);
+
+	return d_lookup(ns->proc_mnt->mnt_sb->s_root, &qstr);
 }
 
 void web100_proc_nlink_update(nlink_t nlink)
